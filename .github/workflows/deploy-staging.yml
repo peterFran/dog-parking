@@ -86,6 +86,17 @@ jobs:
     - name: Deploy to Staging
       run: |
         echo "🚀 Starting SAM deployment..."
+        
+        # Create a unique S3 bucket name
+        BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}"
+        echo "📦 Using S3 bucket: $BUCKET_NAME"
+        
+        # Create the S3 bucket
+        aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || {
+          echo "⚠️  Bucket creation failed, trying with existing bucket..."
+          BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)"
+        }
+        
         sam deploy \
           --template-file .aws-sam/build/template.yaml \
           --stack-name ${{ env.STACK_NAME }} \
@@ -94,7 +105,7 @@ jobs:
           --region ${{ env.AWS_REGION }} \
           --no-fail-on-empty-changeset \
           --no-confirm-changeset \
-          --resolve-s3 \
+          --s3-bucket $BUCKET_NAME \
           --debug
           
     - name: Fix corrupted SAM stack and retry
@@ -111,6 +122,17 @@ jobs:
           aws cloudformation wait stack-delete-complete --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }}
           
           echo "🔄 Retrying SAM deployment..."
+          
+          # Create a unique S3 bucket name for retry
+          RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}-retry"
+          echo "📦 Using retry S3 bucket: $RETRY_BUCKET_NAME"
+          
+          # Create the S3 bucket for retry
+          aws s3 mb s3://$RETRY_BUCKET_NAME --region ${{ env.AWS_REGION }} || {
+            echo "⚠️  Retry bucket creation failed, using fallback name..."
+            RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-retry"
+          }
+          
           sam deploy \
             --template-file .aws-sam/build/template.yaml \
             --stack-name ${{ env.STACK_NAME }} \
@@ -119,7 +141,8 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --no-fail-on-empty-changeset \
             --no-confirm-changeset \
-            --resolve-s3
+            --s3-bucket $RETRY_BUCKET_NAME \
+            --debug
         else
           echo "❌ Different deployment error, not related to corrupted SAM stack"
           exit 1

@@ -135,7 +135,10 @@
                 "s3:PutBucketPublicAccessBlock",
                 "s3:GetBucketPublicAccessBlock"
             ],
-            "Resource": "arn:aws:s3:::aws-sam-cli-*"
+            "Resource": [
+                "arn:aws:s3:::aws-sam-cli-*",
+                "arn:aws:s3:::dog-care-sam-deployments-*"
+            ]
         },
         {
             "Sid": "S3ObjectAccess",
@@ -145,7 +148,10 @@
                 "s3:GetObject",
                 "s3:DeleteObject"
             ],
-            "Resource": "arn:aws:s3:::aws-sam-cli-*/*"
+            "Resource": [
+                "arn:aws:s3:::aws-sam-cli-*/*",
+                "arn:aws:s3:::dog-care-sam-deployments-*/*"
+            ]
         },
         {
             "Sid": "CloudWatchLogsAccess",
