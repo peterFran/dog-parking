@@ -68,6 +68,24 @@ Resources:
                 type: aws_proxy
                 httpMethod: POST
                 uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DogManagementFunction.Arn}/invocations"
+          /owners/{proxy+}:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OwnerManagementFunction.Arn}/invocations"
+          /bookings:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BookingManagementFunction.Arn}/invocations"
+          /bookings/{id}:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BookingManagementFunction.Arn}/invocations"
 
   # Lambda Functions
   DogManagementFunction:
