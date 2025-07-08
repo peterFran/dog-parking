@@ -38,6 +38,16 @@
             ]
         },
         {
+            "Sid": "CloudFormationTransformAccess",
+            "Effect": "Allow",
+            "Action": [
+                "cloudformation:CreateChangeSet"
+            ],
+            "Resource": [
+                "arn:aws:cloudformation:*:aws:transform/Serverless-2016-10-31"
+            ]
+        },
+        {
             "Sid": "DynamoDBAccess",
             "Effect": "Allow",
             "Action": [
