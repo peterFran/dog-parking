@@ -212,15 +212,24 @@ jobs:
         
         # Test complete workflow
         echo "Testing owner registration..."
+        
+        # Use unique email for each test run to avoid duplicates
+        UNIQUE_EMAIL="staging-test-$(date +%s)-${{ github.run_number }}@example.com"
+        echo "Using unique email: $UNIQUE_EMAIL"
+        
         OWNER_RESPONSE=$(curl -s -X POST "$API_URL/owners/register" \
           -H "Content-Type: application/json" \
-          -d '{"name":"Test User","email":"staging-test@example.com","phone":"+1234567890"}')
+          -d "{\"name\":\"Test User\",\"email\":\"$UNIQUE_EMAIL\",\"phone\":\"+1234567890\"}")
+        
+        echo "Owner registration response:"
+        echo "$OWNER_RESPONSE"
         
         OWNER_ID=$(echo "$OWNER_RESPONSE" | grep -o '"id":"[^"]*' | cut -d'"' -f4)
         echo "Owner ID: $OWNER_ID"
         
         if [ -z "$OWNER_ID" ]; then
           echo "❌ Owner registration failed"
+          echo "Full response was: $OWNER_RESPONSE"
           exit 1
         fi
         
