@@ -261,26 +261,6 @@ jobs:
         
         echo "✅ All integration tests passed!"
         
-    - name: Create GitHub Release
-      if: github.event_name == 'push'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        gh release create "staging-${{ github.run_number }}" \
-          --title "Staging Release ${{ github.run_number }}" \
-          --notes "$(cat <<'EOF'
-        🚀 **Staging Deployment**
-        
-        **API URL:** ${{ env.API_URL }}
-        **Commit:** ${{ github.sha }}
-        **Tests:** ✅ All tests passed
-        
-        **Changes in this release:**
-        ${{ github.event.head_commit.message }}
-        EOF
-        )" \
-          --prerelease
-        
     - name: Notify Slack (optional)
       if: always()
       run: |
