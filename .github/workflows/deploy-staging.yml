@@ -87,9 +87,25 @@ jobs:
       run: |
         echo "🚀 Starting SAM deployment..."
         
+        # Function to attempt deployment
+        deploy_sam() {
+          local bucket_name=$1
+          echo "📦 Using S3 bucket: $bucket_name"
+          
+          sam deploy \
+            --template-file .aws-sam/build/template.yaml \
+            --stack-name ${{ env.STACK_NAME }} \
+            --parameter-overrides Environment=staging \
+            --capabilities CAPABILITY_IAM \
+            --region ${{ env.AWS_REGION }} \
+            --no-fail-on-empty-changeset \
+            --no-confirm-changeset \
+            --s3-bucket $bucket_name \
+            --debug
+        }
+        
         # Create a unique S3 bucket name
         BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}"
-        echo "📦 Using S3 bucket: $BUCKET_NAME"
         
         # Create the S3 bucket
         aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || {
@@ -97,21 +113,14 @@ jobs:
           BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)"
         }
         
-        sam deploy \
-          --template-file .aws-sam/build/template.yaml \
-          --stack-name ${{ env.STACK_NAME }} \
-          --parameter-overrides Environment=staging \
-          --capabilities CAPABILITY_IAM \
-          --region ${{ env.AWS_REGION }} \
-          --no-fail-on-empty-changeset \
-          --no-confirm-changeset \
-          --s3-bucket $BUCKET_NAME \
-          --debug
-          
-    - name: Fix deployment failures and retry
-      if: failure()
-      run: |
-        echo "🔧 Deployment failed, checking for stack issues..."
+        # First deployment attempt
+        echo "🎯 First deployment attempt..."
+        if deploy_sam $BUCKET_NAME; then
+          echo "✅ Deployment succeeded on first attempt!"
+          exit 0
+        fi
+        
+        echo "⚠️  First deployment failed, checking for recoverable issues..."
         
         # Check if the main stack is in ROLLBACK_COMPLETE state
         MAIN_STACK_STATUS=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --region ${{ env.AWS_REGION }} --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
@@ -127,26 +136,20 @@ jobs:
           
           # Create a unique S3 bucket name for retry
           RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}-retry"
-          echo "📦 Using retry S3 bucket: $RETRY_BUCKET_NAME"
-          
-          # Create the S3 bucket for retry
           aws s3 mb s3://$RETRY_BUCKET_NAME --region ${{ env.AWS_REGION }} || {
             echo "⚠️  Retry bucket creation failed, using fallback name..."
             RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-retry"
           }
           
-          sam deploy \
-            --template-file .aws-sam/build/template.yaml \
-            --stack-name ${{ env.STACK_NAME }} \
-            --parameter-overrides Environment=staging \
-            --capabilities CAPABILITY_IAM \
-            --region ${{ env.AWS_REGION }} \
-            --no-fail-on-empty-changeset \
-            --no-confirm-changeset \
-            --s3-bucket $RETRY_BUCKET_NAME \
-            --debug
-            
-        # Also check if the error is related to aws-sam-cli-managed-default
+          if deploy_sam $RETRY_BUCKET_NAME; then
+            echo "✅ Deployment succeeded on retry after stack deletion!"
+            exit 0
+          else
+            echo "❌ Deployment failed even after stack deletion"
+            exit 1
+          fi
+          
+        # Check if the error is related to aws-sam-cli-managed-default
         elif aws cloudformation describe-stacks --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }} --query 'Stacks[0].StackStatus' --output text 2>/dev/null | grep -q "REVIEW_IN_PROGRESS"; then
           echo "🗑️  Found corrupted SAM managed stack, deleting it..."
           aws cloudformation delete-stack --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }}
@@ -158,26 +161,20 @@ jobs:
           
           # Create a unique S3 bucket name for retry
           RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}-retry2"
-          echo "📦 Using retry S3 bucket: $RETRY_BUCKET_NAME"
-          
-          # Create the S3 bucket for retry
           aws s3 mb s3://$RETRY_BUCKET_NAME --region ${{ env.AWS_REGION }} || {
             echo "⚠️  Retry bucket creation failed, using fallback name..."
             RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-retry2"
           }
           
-          sam deploy \
-            --template-file .aws-sam/build/template.yaml \
-            --stack-name ${{ env.STACK_NAME }} \
-            --parameter-overrides Environment=staging \
-            --capabilities CAPABILITY_IAM \
-            --region ${{ env.AWS_REGION }} \
-            --no-fail-on-empty-changeset \
-            --no-confirm-changeset \
-            --s3-bucket $RETRY_BUCKET_NAME \
-            --debug
+          if deploy_sam $RETRY_BUCKET_NAME; then
+            echo "✅ Deployment succeeded on retry after SAM managed stack deletion!"
+            exit 0
+          else
+            echo "❌ Deployment failed even after SAM managed stack deletion"
+            exit 1
+          fi
         else
-          echo "❌ Different deployment error, checking for specific issues..."
+          echo "❌ Deployment failed with unrecoverable error"
           echo "Main stack status: $MAIN_STACK_STATUS"
           exit 1
         fi
