@@ -85,6 +85,7 @@ jobs:
       
     - name: Deploy to Staging
       run: |
+        echo "🚀 Starting SAM deployment..."
         sam deploy \
           --template-file .aws-sam/build/template.yaml \
           --stack-name ${{ env.STACK_NAME }} \
@@ -93,7 +94,25 @@ jobs:
           --region ${{ env.AWS_REGION }} \
           --no-fail-on-empty-changeset \
           --no-confirm-changeset \
-          --resolve-s3
+          --resolve-s3 \
+          --debug
+          
+    - name: Debug CloudFormation Stack on Failure
+      if: failure()
+      run: |
+        echo "🔍 Deployment failed, checking CloudFormation stack events..."
+        aws cloudformation describe-stack-events \
+          --stack-name ${{ env.STACK_NAME }} \
+          --region ${{ env.AWS_REGION }} \
+          --query 'StackEvents[?ResourceStatus==`CREATE_FAILED` || ResourceStatus==`UPDATE_FAILED`]' \
+          --output table || true
+        
+        echo "🔍 Checking stack status..."
+        aws cloudformation describe-stacks \
+          --stack-name ${{ env.STACK_NAME }} \
+          --region ${{ env.AWS_REGION }} \
+          --query 'Stacks[0].{Status:StackStatus,Reason:StackStatusReason}' \
+          --output table || true
           
     - name: Get API Gateway URL
       run: |

@@ -1,0 +1,168 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ApiGatewayAccess",
+            "Effect": "Allow",
+            "Action": [
+                "apigateway:DELETE",
+                "apigateway:PUT",
+                "apigateway:PATCH",
+                "apigateway:POST",
+                "apigateway:GET"
+            ],
+            "Resource": "arn:aws:apigateway:*::/restapis/*"
+        },
+        {
+            "Sid": "CloudFormationAccess",
+            "Effect": "Allow",
+            "Action": [
+                "cloudformation:DescribeStackEvents",
+                "cloudformation:CreateStack",
+                "cloudformation:GetTemplate",
+                "cloudformation:DeleteStack",
+                "cloudformation:DescribeStackResources",
+                "cloudformation:UpdateStack",
+                "cloudformation:DescribeStacks",
+                "cloudformation:CreateChangeSet",
+                "cloudformation:DeleteChangeSet",
+                "cloudformation:DescribeChangeSet",
+                "cloudformation:ExecuteChangeSet",
+                "cloudformation:ListStackResources",
+                "cloudformation:ValidateTemplate"
+            ],
+            "Resource": [
+                "arn:aws:cloudformation:*:*:stack/dog-care-*",
+                "arn:aws:cloudformation:*:*:stack/dog-parking-*",
+                "arn:aws:cloudformation:*:*:stack/aws-sam-cli-managed-*"
+            ]
+        },
+        {
+            "Sid": "DynamoDBAccess",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:CreateTable",
+                "dynamodb:TagResource",
+                "dynamodb:UntagResource",
+                "dynamodb:DescribeTable",
+                "dynamodb:DeleteTable",
+                "dynamodb:UpdateTable",
+                "dynamodb:DescribeTimeToLive",
+                "dynamodb:UpdateTimeToLive",
+                "dynamodb:ListTagsOfResource",
+                "dynamodb:DescribeStream",
+                "dynamodb:ListStreams"
+            ],
+            "Resource": [
+                "arn:aws:dynamodb:*:*:table/dogs-*",
+                "arn:aws:dynamodb:*:*:table/owners-*",
+                "arn:aws:dynamodb:*:*:table/bookings-*"
+            ]
+        },
+        {
+            "Sid": "IAMRoleAccess",
+            "Effect": "Allow",
+            "Action": [
+                "iam:GetRole",
+                "iam:PassRole",
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:PutRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:GetRolePolicy",
+                "iam:TagRole",
+                "iam:UntagRole",
+                "iam:UpdateAssumeRolePolicy"
+            ],
+            "Resource": [
+                "arn:aws:iam::*:role/dog-care-*",
+                "arn:aws:iam::*:role/*DogManagement*",
+                "arn:aws:iam::*:role/*OwnerManagement*",
+                "arn:aws:iam::*:role/*BookingManagement*"
+            ]
+        },
+        {
+            "Sid": "IAMPolicyAccess",
+            "Effect": "Allow",
+            "Action": [
+                "iam:GetPolicy",
+                "iam:GetPolicyVersion",
+                "iam:ListPolicyVersions"
+            ],
+            "Resource": [
+                "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+                "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess",
+                "arn:aws:iam::aws:policy/service-role/AWSLambdaDynamoDBExecutionRole"
+            ]
+        },
+        {
+            "Sid": "LambdaAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:CreateFunction",
+                "lambda:UpdateFunctionCode",
+                "lambda:TagResource",
+                "lambda:InvokeFunction",
+                "lambda:GetFunction",
+                "lambda:GetFunctionConfiguration",
+                "lambda:UpdateFunctionConfiguration",
+                "lambda:DeleteFunction",
+                "lambda:UntagResource",
+                "lambda:ListFunctions",
+                "lambda:AddPermission",
+                "lambda:RemovePermission",
+                "lambda:GetPolicy",
+                "lambda:ListTags"
+            ],
+            "Resource": [
+                "arn:aws:lambda:*:*:function:dog-management-*",
+                "arn:aws:lambda:*:*:function:owner-management-*",
+                "arn:aws:lambda:*:*:function:booking-management-*"
+            ]
+        },
+        {
+            "Sid": "S3BucketAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:CreateBucket",
+                "s3:DeleteBucket",
+                "s3:GetBucketLocation",
+                "s3:ListBucket",
+                "s3:PutBucketVersioning",
+                "s3:GetBucketVersioning",
+                "s3:PutBucketPublicAccessBlock",
+                "s3:GetBucketPublicAccessBlock"
+            ],
+            "Resource": "arn:aws:s3:::aws-sam-cli-*"
+        },
+        {
+            "Sid": "S3ObjectAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject"
+            ],
+            "Resource": "arn:aws:s3:::aws-sam-cli-*/*"
+        },
+        {
+            "Sid": "CloudWatchLogsAccess",
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:DeleteLogGroup",
+                "logs:DescribeLogGroups",
+                "logs:PutRetentionPolicy",
+                "logs:TagLogGroup",
+                "logs:UntagLogGroup"
+            ],
+            "Resource": [
+                "arn:aws:logs:*:*:log-group:/aws/lambda/dog-management-*",
+                "arn:aws:logs:*:*:log-group:/aws/lambda/owner-management-*",
+                "arn:aws:logs:*:*:log-group:/aws/lambda/booking-management-*"
+            ]
+        }
+    ]
+}
