@@ -1,0 +1,192 @@
+name: Deploy to Staging Environment
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [ closed ]
+
+env:
+  AWS_REGION: us-east-1
+  SAM_TEMPLATE: template.yaml
+  STACK_NAME: dog-care-staging
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Create virtual environment
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        python -m pip install --upgrade pip
+        
+    - name: Install dependencies
+      run: |
+        source venv/bin/activate
+        pip install -r requirements-dev.txt
+        
+    - name: Run tests
+      run: |
+        source venv/bin/activate
+        pytest tests/unit/ --cov=functions --cov-report=xml --cov-fail-under=50
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Setup AWS SAM CLI
+      uses: aws-actions/setup-sam@v2
+      with:
+        use-installer: true
+        
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Validate SAM template
+      run: sam validate --template ${{ env.SAM_TEMPLATE }}
+      
+    - name: Build SAM application
+      run: sam build --template ${{ env.SAM_TEMPLATE }} --use-container
+      
+    - name: Deploy to Staging
+      run: |
+        sam deploy \
+          --template-file .aws-sam/build/template.yaml \
+          --stack-name ${{ env.STACK_NAME }} \
+          --parameter-overrides Environment=staging \
+          --capabilities CAPABILITY_IAM \
+          --region ${{ env.AWS_REGION }} \
+          --no-fail-on-empty-changeset \
+          --no-confirm-changeset
+          
+    - name: Get API Gateway URL
+      run: |
+        API_URL=$(aws cloudformation describe-stacks \
+          --stack-name ${{ env.STACK_NAME }} \
+          --query 'Stacks[0].Outputs[?OutputKey==`DogCareApiUrl`].OutputValue' \
+          --output text \
+          --region ${{ env.AWS_REGION }})
+        echo "🚀 Staging API deployed at: $API_URL"
+        echo "API_URL=$API_URL" >> $GITHUB_ENV
+        
+    - name: Run integration tests
+      run: |
+        echo "🧪 Running integration tests against Staging environment..."
+        
+        # Test complete workflow
+        echo "Testing owner registration..."
+        OWNER_RESPONSE=$(curl -s -X POST "$API_URL/owners/register" \
+          -H "Content-Type: application/json" \
+          -d '{"name":"Test User","email":"staging-test@example.com","phone":"+1234567890"}')
+        
+        OWNER_ID=$(echo "$OWNER_RESPONSE" | grep -o '"id":"[^"]*' | cut -d'"' -f4)
+        echo "Owner ID: $OWNER_ID"
+        
+        if [ -z "$OWNER_ID" ]; then
+          echo "❌ Owner registration failed"
+          exit 1
+        fi
+        
+        echo "Testing dog registration..."
+        DOG_RESPONSE=$(curl -s -X POST "$API_URL/dogs" \
+          -H "Content-Type: application/json" \
+          -d "{\"name\":\"Test Dog\",\"breed\":\"Labrador\",\"age\":2,\"size\":\"medium\",\"owner_id\":\"$OWNER_ID\"}")
+        
+        DOG_ID=$(echo "$DOG_RESPONSE" | grep -o '"id":"[^"]*' | cut -d'"' -f4)
+        echo "Dog ID: $DOG_ID"
+        
+        if [ -z "$DOG_ID" ]; then
+          echo "❌ Dog registration failed"
+          exit 1
+        fi
+        
+        echo "Testing booking creation..."
+        BOOKING_RESPONSE=$(curl -s -X POST "$API_URL/bookings" \
+          -H "Content-Type: application/json" \
+          -d "{\"dog_id\":\"$DOG_ID\",\"owner_id\":\"$OWNER_ID\",\"service_type\":\"daycare\",\"start_time\":\"2024-12-01T09:00:00Z\",\"end_time\":\"2024-12-01T17:00:00Z\"}")
+        
+        BOOKING_ID=$(echo "$BOOKING_RESPONSE" | grep -o '"id":"[^"]*' | cut -d'"' -f4)
+        echo "Booking ID: $BOOKING_ID"
+        
+        if [ -z "$BOOKING_ID" ]; then
+          echo "❌ Booking creation failed"
+          exit 1
+        fi
+        
+        echo "✅ All integration tests passed!"
+        
+    - name: Create GitHub Release
+      if: github.event_name == 'push'
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: staging-${{ github.run_number }}
+        release_name: Staging Release ${{ github.run_number }}
+        body: |
+          🚀 **Staging Deployment**
+          
+          **API URL:** ${{ env.API_URL }}
+          **Commit:** ${{ github.sha }}
+          **Tests:** ✅ All tests passed
+          
+          **Changes in this release:**
+          ${{ github.event.head_commit.message }}
+        draft: false
+        prerelease: true
+        
+    - name: Notify Slack (optional)
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Staging deployment successful!"
+          # Add Slack webhook here if needed
+        else
+          echo "❌ Staging deployment failed!"
+          # Add Slack webhook here if needed
+        fi
+        
+    - name: Deployment Summary
+      run: |
+        echo "## 🎉 Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Environment:** Staging" >> $GITHUB_STEP_SUMMARY
+        echo "- **Stack Name:** ${{ env.STACK_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **API URL:** ${{ env.API_URL }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tests:** ✅ Passed" >> $GITHUB_STEP_SUMMARY
+        echo "- **Release:** staging-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY

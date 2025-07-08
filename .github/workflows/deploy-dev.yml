@@ -1,0 +1,111 @@
+name: Deploy to Dev Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_reason:
+        description: 'Reason for deployment'
+        required: true
+        default: 'Manual deployment for testing'
+
+env:
+  AWS_REGION: us-east-1
+  SAM_TEMPLATE: template.yaml
+  STACK_NAME: dog-care-dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Setup AWS SAM CLI
+      uses: aws-actions/setup-sam@v2
+      with:
+        use-installer: true
+        
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Validate SAM template
+      run: sam validate --template ${{ env.SAM_TEMPLATE }}
+      
+    - name: Build SAM application
+      run: sam build --template ${{ env.SAM_TEMPLATE }} --use-container
+      
+    - name: Deploy to Dev
+      run: |
+        sam deploy \
+          --template-file .aws-sam/build/template.yaml \
+          --stack-name ${{ env.STACK_NAME }} \
+          --parameter-overrides Environment=dev \
+          --capabilities CAPABILITY_IAM \
+          --region ${{ env.AWS_REGION }} \
+          --no-fail-on-empty-changeset \
+          --no-confirm-changeset
+          
+    - name: Get API Gateway URL
+      run: |
+        API_URL=$(aws cloudformation describe-stacks \
+          --stack-name ${{ env.STACK_NAME }} \
+          --query 'Stacks[0].Outputs[?OutputKey==`DogCareApiUrl`].OutputValue' \
+          --output text \
+          --region ${{ env.AWS_REGION }})
+        echo "🚀 Dev API deployed at: $API_URL"
+        echo "API_URL=$API_URL" >> $GITHUB_ENV
+        
+    - name: Run smoke tests
+      run: |
+        echo "🧪 Running smoke tests against Dev environment..."
+        # Test owner registration
+        response=$(curl -s -X POST "$API_URL/owners/register" \
+          -H "Content-Type: application/json" \
+          -d '{"name":"Test User","email":"test@example.com","phone":"+1234567890"}')
+        echo "Owner registration response: $response"
+        
+        # Check if response contains an ID
+        if echo "$response" | grep -q '"id"'; then
+          echo "✅ Smoke test passed!"
+        else
+          echo "❌ Smoke test failed!"
+          exit 1
+        fi
+        
+    - name: Comment on PR (if applicable)
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `🚀 **Dev Environment Deployed!**
+            
+            **API URL:** ${{ env.API_URL }}
+            **Reason:** ${{ github.event.inputs.deploy_reason }}
+            **Commit:** ${{ github.sha }}
+            
+            Ready for testing! 🎉`
+          })
+          
+    - name: Deployment Summary
+      run: |
+        echo "## 🎉 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Environment:** Dev" >> $GITHUB_STEP_SUMMARY
+        echo "- **Stack Name:** ${{ env.STACK_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **API URL:** ${{ env.API_URL }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Reason:** ${{ github.event.inputs.deploy_reason }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

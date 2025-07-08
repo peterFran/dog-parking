@@ -1,0 +1,59 @@
+# Coverage configuration for Dog Care App
+
+[run]
+source = functions/
+omit = 
+    */tests/*
+    */venv/*
+    */__pycache__/*
+    */.*
+    */site-packages/*
+    */test_*
+    *_test.py
+
+# Branch coverage
+branch = True
+
+# Parallel processing
+parallel = True
+
+[report]
+# Reporting options
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    def __str__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstract
+    pass
+
+# Show missing lines
+show_missing = True
+
+# Precision for coverage percentage
+precision = 2
+
+# Skip covered files
+skip_covered = False
+
+# Skip empty files
+skip_empty = True
+
+# Sort by coverage percentage
+sort = Cover
+
+[html]
+# HTML report configuration
+directory = htmlcov
+title = Dog Care App - Coverage Report
+
+[xml]
+# XML report for CI systems
+output = reports/coverage.xml
+
+[json]
+# JSON report
+output = reports/coverage.json

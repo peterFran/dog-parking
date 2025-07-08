@@ -1,0 +1,326 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: Dog Care App MVP Infrastructure
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Environment name
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.11
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        DOGS_TABLE: !Ref DogsTable
+        OWNERS_TABLE: !Ref OwnersTable
+        BOOKINGS_TABLE: !Ref BookingsTable
+        PAYMENTS_TABLE: !Ref PaymentsTable
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: "'*'"
+
+Resources:
+  # API Gateway
+  DogCareApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "dog-care-api-${Environment}"
+      StageName: !Ref Environment
+      OpenApiVersion: 3.0.1
+      DefinitionBody:
+        openapi: 3.0.1
+        info:
+          title: Dog Care API
+          version: 1.0.0
+        paths:
+          /dogs:
+            get:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DogManagementFunction.Arn}/invocations"
+            post:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DogManagementFunction.Arn}/invocations"
+          /dogs/{id}:
+            get:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DogManagementFunction.Arn}/invocations"
+            put:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DogManagementFunction.Arn}/invocations"
+            delete:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DogManagementFunction.Arn}/invocations"
+
+  # Lambda Functions
+  DogManagementFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "dog-management-${Environment}"
+      CodeUri: functions/dog_management/
+      Handler: app.lambda_handler
+      Events:
+        DogsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DogCareApi
+            Path: /dogs
+            Method: ANY
+        DogApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DogCareApi
+            Path: /dogs/{id}
+            Method: ANY
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DogsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OwnersTable
+
+  OwnerManagementFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "owner-management-${Environment}"
+      CodeUri: functions/owner_management/
+      Handler: app.lambda_handler
+      Events:
+        OwnersApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DogCareApi
+            Path: /owners/{proxy+}
+            Method: ANY
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OwnersTable
+
+  BookingManagementFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "booking-management-${Environment}"
+      CodeUri: functions/booking_management/
+      Handler: app.lambda_handler
+      Events:
+        BookingsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DogCareApi
+            Path: /bookings
+            Method: ANY
+        BookingApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DogCareApi
+            Path: /bookings/{id}
+            Method: ANY
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BookingsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DogsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OwnersTable
+
+  PaymentProcessingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "payment-processing-${Environment}"
+      CodeUri: functions/payment_processing/
+      Handler: app.lambda_handler
+      Events:
+        PaymentsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DogCareApi
+            Path: /payments
+            Method: ANY
+        PaymentApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DogCareApi
+            Path: /payments/{id}
+            Method: ANY
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PaymentsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BookingsTable
+
+  # DynamoDB Tables
+  DogsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "dogs-${Environment}"
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: owner_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: owner-index
+          KeySchema:
+            - AttributeName: owner_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          BillingMode: PAY_PER_REQUEST
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  OwnersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "owners-${Environment}"
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: email-index
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          BillingMode: PAY_PER_REQUEST
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  BookingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "bookings-${Environment}"
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: owner_id
+          AttributeType: S
+        - AttributeName: start_time
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: owner-time-index
+          KeySchema:
+            - AttributeName: owner_id
+              KeyType: HASH
+            - AttributeName: start_time
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          BillingMode: PAY_PER_REQUEST
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  PaymentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "payments-${Environment}"
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: booking_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: booking-index
+          KeySchema:
+            - AttributeName: booking_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          BillingMode: PAY_PER_REQUEST
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  # CloudWatch Log Groups
+  DogManagementLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/dog-management-${Environment}"
+      RetentionInDays: 14
+
+  OwnerManagementLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/owner-management-${Environment}"
+      RetentionInDays: 14
+
+  BookingManagementLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/booking-management-${Environment}"
+      RetentionInDays: 14
+
+  PaymentProcessingLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/payment-processing-${Environment}"
+      RetentionInDays: 14
+
+Outputs:
+  DogCareApiUrl:
+    Description: "API Gateway endpoint URL for Dog Care API"
+    Value: !Sub "https://${DogCareApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiUrl"
+
+  DogsTableName:
+    Description: "DynamoDB table name for Dogs"
+    Value: !Ref DogsTable
+    Export:
+      Name: !Sub "${AWS::StackName}-DogsTable"
+
+  OwnersTableName:
+    Description: "DynamoDB table name for Owners"
+    Value: !Ref OwnersTable
+    Export:
+      Name: !Sub "${AWS::StackName}-OwnersTable"
+
+  BookingsTableName:
+    Description: "DynamoDB table name for Bookings"
+    Value: !Ref BookingsTable
+    Export:
+      Name: !Sub "${AWS::StackName}-BookingsTable"
+
+  PaymentsTableName:
+    Description: "DynamoDB table name for Payments"
+    Value: !Ref PaymentsTable
+    Export:
+      Name: !Sub "${AWS::StackName}-PaymentsTable"

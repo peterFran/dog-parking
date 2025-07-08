@@ -1,0 +1,20 @@
+{
+  "TableName": "payments-local",
+  "AttributeDefinitions": [
+    {"AttributeName": "id", "AttributeType": "S"},
+    {"AttributeName": "booking_id", "AttributeType": "S"}
+  ],
+  "KeySchema": [
+    {"AttributeName": "id", "KeyType": "HASH"}
+  ],
+  "GlobalSecondaryIndexes": [
+    {
+      "IndexName": "booking-index",
+      "KeySchema": [
+        {"AttributeName": "booking_id", "KeyType": "HASH"}
+      ],
+      "Projection": {"ProjectionType": "ALL"}
+    }
+  ],
+  "BillingMode": "PAY_PER_REQUEST"
+}

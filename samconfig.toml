@@ -1,0 +1,59 @@
+version = 0.1
+
+[default]
+[default.global.parameters]
+stack_name = "dog-care-dev"
+region = "us-east-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+stack_name = "dog-care-dev"
+s3_bucket = ""  # Will be auto-created
+s3_prefix = "dog-care-dev"
+region = "us-east-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Environment=dev"
+image_repositories = []
+
+[default.package.parameters]
+s3_bucket = ""  # Will be auto-created
+s3_prefix = "dog-care-dev"
+region = "us-east-1"
+
+[default.sync.parameters]
+watch = true
+
+[default.local_start_api.parameters]
+warm_containers = "EAGER"
+
+[default.local_start_lambda.parameters]
+warm_containers = "EAGER"
+
+# Environment-specific configurations
+[dev]
+[dev.deploy.parameters]
+stack_name = "dog-care-dev"
+parameter_overrides = "Environment=dev"
+s3_prefix = "dog-care-dev"
+
+[staging]
+[staging.deploy.parameters]
+stack_name = "dog-care-staging"
+parameter_overrides = "Environment=staging"
+s3_prefix = "dog-care-staging"
+
+[prod]
+[prod.deploy.parameters]
+stack_name = "dog-care-prod"
+parameter_overrides = "Environment=prod"
+s3_prefix = "dog-care-prod"

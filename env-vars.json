@@ -1,0 +1,26 @@
+{
+  "DogManagementFunction": {
+    "DOGS_TABLE": "dogs-local",
+    "OWNERS_TABLE": "owners-local",
+    "AWS_SAM_LOCAL": "true",
+    "AWS_DEFAULT_REGION": "us-east-1"
+  },
+  "OwnerManagementFunction": {
+    "OWNERS_TABLE": "owners-local",
+    "AWS_SAM_LOCAL": "true",
+    "AWS_DEFAULT_REGION": "us-east-1"
+  },
+  "BookingManagementFunction": {
+    "BOOKINGS_TABLE": "bookings-local",
+    "DOGS_TABLE": "dogs-local",
+    "OWNERS_TABLE": "owners-local",
+    "AWS_SAM_LOCAL": "true",
+    "AWS_DEFAULT_REGION": "us-east-1"
+  },
+  "PaymentProcessingFunction": {
+    "PAYMENTS_TABLE": "payments-local",
+    "BOOKINGS_TABLE": "bookings-local",
+    "AWS_SAM_LOCAL": "true",
+    "AWS_DEFAULT_REGION": "us-east-1"
+  }
+}
