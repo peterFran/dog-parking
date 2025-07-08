@@ -97,6 +97,34 @@ jobs:
           --resolve-s3 \
           --debug
           
+    - name: Fix corrupted SAM stack and retry
+      if: failure()
+      run: |
+        echo "🔧 Deployment failed, checking for corrupted SAM managed stack..."
+        
+        # Check if the error is related to aws-sam-cli-managed-default
+        if aws cloudformation describe-stacks --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }} --query 'Stacks[0].StackStatus' --output text 2>/dev/null | grep -q "REVIEW_IN_PROGRESS"; then
+          echo "🗑️  Found corrupted SAM managed stack, deleting it..."
+          aws cloudformation delete-stack --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }}
+          
+          echo "⏳ Waiting for stack deletion..."
+          aws cloudformation wait stack-delete-complete --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }}
+          
+          echo "🔄 Retrying SAM deployment..."
+          sam deploy \
+            --template-file .aws-sam/build/template.yaml \
+            --stack-name ${{ env.STACK_NAME }} \
+            --parameter-overrides Environment=staging \
+            --capabilities CAPABILITY_IAM \
+            --region ${{ env.AWS_REGION }} \
+            --no-fail-on-empty-changeset \
+            --no-confirm-changeset \
+            --resolve-s3
+        else
+          echo "❌ Different deployment error, not related to corrupted SAM stack"
+          exit 1
+        fi
+          
     - name: Debug CloudFormation Stack on Failure
       if: failure()
       run: |
