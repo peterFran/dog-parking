@@ -263,23 +263,23 @@ jobs:
         
     - name: Create GitHub Release
       if: github.event_name == 'push'
-      uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: staging-${{ github.run_number }}
-        release_name: Staging Release ${{ github.run_number }}
-        body: |
-          🚀 **Staging Deployment**
-          
-          **API URL:** ${{ env.API_URL }}
-          **Commit:** ${{ github.sha }}
-          **Tests:** ✅ All tests passed
-          
-          **Changes in this release:**
-          ${{ github.event.head_commit.message }}
-        draft: false
-        prerelease: true
+      run: |
+        gh release create "staging-${{ github.run_number }}" \
+          --title "Staging Release ${{ github.run_number }}" \
+          --notes "$(cat <<'EOF'
+        🚀 **Staging Deployment**
+        
+        **API URL:** ${{ env.API_URL }}
+        **Commit:** ${{ github.sha }}
+        **Tests:** ✅ All tests passed
+        
+        **Changes in this release:**
+        ${{ github.event.head_commit.message }}
+        EOF
+        )" \
+          --prerelease
         
     - name: Notify Slack (optional)
       if: always()
