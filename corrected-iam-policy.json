@@ -11,7 +11,10 @@
                 "apigateway:POST",
                 "apigateway:GET"
             ],
-            "Resource": "arn:aws:apigateway:*::/restapis/*"
+            "Resource": [
+                "arn:aws:apigateway:*::/restapis",
+                "arn:aws:apigateway:*::/restapis/*"
+            ]
         },
         {
             "Sid": "CloudFormationAccess",
