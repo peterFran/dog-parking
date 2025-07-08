@@ -21,7 +21,6 @@ Globals:
         DOGS_TABLE: !Ref DogsTable
         OWNERS_TABLE: !Ref OwnersTable
         BOOKINGS_TABLE: !Ref BookingsTable
-        PAYMENTS_TABLE: !Ref PaymentsTable
   Api:
     Cors:
       AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
@@ -140,30 +139,6 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref OwnersTable
 
-  PaymentProcessingFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "payment-processing-${Environment}"
-      CodeUri: functions/payment_processing/
-      Handler: app.lambda_handler
-      Events:
-        PaymentsApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref DogCareApi
-            Path: /payments
-            Method: ANY
-        PaymentApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref DogCareApi
-            Path: /payments/{id}
-            Method: ANY
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref PaymentsTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref BookingsTable
 
   # DynamoDB Tables
   DogsTable:
@@ -245,29 +220,6 @@ Resources:
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
 
-  PaymentsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub "payments-${Environment}"
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-        - AttributeName: booking_id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-      GlobalSecondaryIndexes:
-        - IndexName: booking-index
-          KeySchema:
-            - AttributeName: booking_id
-              KeyType: HASH
-          Projection:
-            ProjectionType: ALL
-          BillingMode: PAY_PER_REQUEST
-      BillingMode: PAY_PER_REQUEST
-      StreamSpecification:
-        StreamViewType: NEW_AND_OLD_IMAGES
 
   # CloudWatch Log Groups
   DogManagementLogGroup:
@@ -288,11 +240,6 @@ Resources:
       LogGroupName: !Sub "/aws/lambda/booking-management-${Environment}"
       RetentionInDays: 14
 
-  PaymentProcessingLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/payment-processing-${Environment}"
-      RetentionInDays: 14
 
 Outputs:
   DogCareApiUrl:
@@ -319,8 +266,3 @@ Outputs:
     Export:
       Name: !Sub "${AWS::StackName}-BookingsTable"
 
-  PaymentsTableName:
-    Description: "DynamoDB table name for Payments"
-    Value: !Ref PaymentsTable
-    Export:
-      Name: !Sub "${AWS::StackName}-PaymentsTable"

@@ -233,67 +233,28 @@ class TestAPIIntegration:
         assert data["id"] == self.test_data["booking_id"]
         assert data["service_type"] == "daycare"
 
-    def test_10_process_payment(self):
-        """Test processing payment"""
-        if "booking_id" not in self.test_data or "booking_price" not in self.test_data:
-            pytest.skip("Booking creation test must pass first")
-
-        payment_data = {
-            "booking_id": self.test_data["booking_id"],
-            "amount": self.test_data["booking_price"],
-            "payment_method": "credit_card",
-            "payment_token": "test_success",
-        }
-
-        response = requests.post(
-            f"{self.api_base_url}/payments", json=payment_data, headers=self.headers
-        )
-
-        assert response.status_code == 201
-        data = response.json()
-        assert data["booking_id"] == payment_data["booking_id"]
-        assert data["amount"] == payment_data["amount"]
-        assert data["status"] == "completed"
-        assert "transaction_id" in data
-        assert "id" in data
-
-        # Store for subsequent tests
-        self.test_data["payment_id"] = data["id"]
-
-    def test_11_get_payment(self):
-        """Test getting payment details"""
-        if "payment_id" not in self.test_data:
-            pytest.skip("Payment processing test must pass first")
-
-        response = requests.get(
-            f"{self.api_base_url}/payments/{self.test_data['payment_id']}",
-            headers=self.headers,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["id"] == self.test_data["payment_id"]
-        assert data["status"] == "completed"
-
-    def test_12_list_payments(self):
-        """Test listing payments for booking"""
+    def test_10_confirm_booking(self):
+        """Test confirming booking (payment removed)"""
         if "booking_id" not in self.test_data:
             pytest.skip("Booking creation test must pass first")
 
-        response = requests.get(
-            f"{self.api_base_url}/payments",
-            params={"booking_id": self.test_data["booking_id"]},
+        # Update booking status to confirmed
+        update_data = {"status": "confirmed"}
+
+        response = requests.put(
+            f"{self.api_base_url}/bookings/{self.test_data['booking_id']}",
+            json=update_data,
             headers=self.headers,
         )
 
         assert response.status_code == 200
         data = response.json()
-        assert "payments" in data
-        assert "count" in data
-        assert data["count"] >= 1
+        assert data["status"] == "confirmed"
 
-    def test_13_update_booking(self):
-        """Test updating booking after payment"""
+
+
+    def test_11_update_booking(self):
+        """Test updating booking after confirmation"""
         if "booking_id" not in self.test_data:
             pytest.skip("Booking creation test must pass first")
 
@@ -309,7 +270,7 @@ class TestAPIIntegration:
         data = response.json()
         assert data["special_instructions"] == "Updated via integration test"
 
-    def test_14_error_handling(self):
+    def test_12_error_handling(self):
         """Test error handling scenarios"""
         # Test invalid dog creation (missing required field)
         invalid_dog_data = {
@@ -336,7 +297,7 @@ class TestAPIIntegration:
         assert "error" in data
         assert "not found" in data["error"].lower()
 
-    def test_15_cleanup(self):
+    def test_13_cleanup(self):
         """Clean up test data"""
         # Cancel booking
         if "booking_id" in self.test_data:
@@ -391,24 +352,22 @@ class TestAPIErrorScenarios:
         data = response2.json()
         assert "Email already registered" in data["error"]
 
-    def test_invalid_payment_scenarios(self):
-        """Test various payment failure scenarios"""
-        # Test with invalid payment token
-        payment_data = {
-            "booking_id": "booking-test",
-            "amount": 45.00,
-            "payment_method": "credit_card",
-            "payment_token": "test_decline",
+    def test_invalid_booking_scenarios(self):
+        """Test various booking failure scenarios"""
+        # Test with invalid booking data
+        booking_data = {
+            "dog_id": "non-existent-dog",
+            "owner_id": "non-existent-owner",
+            "service_type": "daycare",
         }
 
-        # This will fail because booking doesn't exist, but tests the flow
         response = requests.post(
-            f"{self.api_base_url}/payments", json=payment_data, headers=self.headers
+            f"{self.api_base_url}/bookings", json=booking_data, headers=self.headers
         )
         assert response.status_code in [
             400,
             404,
-        ]  # Either booking not found or payment declined
+        ]  # Either validation error or dog/owner not found
 
     def test_cors_headers(self):
         """Test CORS headers are present"""
