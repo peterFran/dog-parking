@@ -54,7 +54,8 @@ jobs:
           --capabilities CAPABILITY_IAM \
           --region ${{ env.AWS_REGION }} \
           --no-fail-on-empty-changeset \
-          --no-confirm-changeset
+          --no-confirm-changeset \
+          --resolve-s3
           
     - name: Get API Gateway URL
       run: |
