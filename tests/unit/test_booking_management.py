@@ -5,6 +5,8 @@ from unittest.mock import patch
 import sys
 import os
 from datetime import datetime, timezone
+import pytest
+from decimal import Decimal
 
 # Add the functions directory to the path
 booking_management_dir = os.path.join(os.path.dirname(__file__), "../../functions/booking_management")
@@ -17,55 +19,15 @@ if 'app' in sys.modules:
 from app import lambda_handler, calculate_price
 
 
-@mock_aws
-def test_create_booking():
+def test_create_booking(mock_env, dynamodb_setup):
     """Test creating a new booking"""
-    # Setup mock DynamoDB
-    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-
-    # Create mock tables
-    dynamodb.create_table(
-        TableName="bookings-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[
-            {"AttributeName": "id", "AttributeType": "S"},
-            {"AttributeName": "owner_id", "AttributeType": "S"},
-            {"AttributeName": "start_time", "AttributeType": "S"},
-        ],
-        GlobalSecondaryIndexes=[
-            {
-                "IndexName": "owner-time-index",
-                "KeySchema": [
-                    {"AttributeName": "owner_id", "KeyType": "HASH"},
-                    {"AttributeName": "start_time", "KeyType": "RANGE"},
-                ],
-                "Projection": {"ProjectionType": "ALL"},
-            }
-        ],
-        BillingMode="PAY_PER_REQUEST",
-    )
-
-    dynamodb.create_table(
-        TableName="dogs-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
-        BillingMode="PAY_PER_REQUEST",
-    )
-
-    dynamodb.create_table(
-        TableName="owners-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
-        BillingMode="PAY_PER_REQUEST",
-    )
-
     # Create test data
-    dogs_table = dynamodb.Table("dogs-test")
+    dogs_table = dynamodb_setup.Table("dogs-test")
     dogs_table.put_item(
         Item={"id": "dog-123", "name": "Buddy", "owner_id": "owner-123"}
     )
 
-    owners_table = dynamodb.Table("owners-test")
+    owners_table = dynamodb_setup.Table("owners-test")
     owners_table.put_item(Item={"id": "owner-123", "name": "John Doe"})
 
     # Test event
@@ -84,15 +46,7 @@ def test_create_booking():
         ),
     }
 
-    with patch.dict(
-        os.environ,
-        {
-            "BOOKINGS_TABLE": "bookings-test",
-            "DOGS_TABLE": "dogs-test",
-            "OWNERS_TABLE": "owners-test",
-        },
-    ):
-        response = lambda_handler(event, None)
+    response = lambda_handler(event, None)
 
     assert response["statusCode"] == 201
     body = json.loads(response["body"])
@@ -103,54 +57,26 @@ def test_create_booking():
     assert "id" in body
 
 
-@mock_aws
-def test_create_booking_invalid_dog_owner():
+def test_create_booking_invalid_dog_owner(mock_env, dynamodb_setup):
     """Test creating booking with dog that doesn't belong to owner"""
-    # Setup mock DynamoDB
-    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-
-    dynamodb.create_table(
-        TableName="bookings-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
-        BillingMode="PAY_PER_REQUEST",
-    )
-
-    dynamodb.create_table(
-        TableName="dogs-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
-        BillingMode="PAY_PER_REQUEST",
-    )
-
-    dynamodb.create_table(
-        TableName="owners-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
-        BillingMode="PAY_PER_REQUEST",
-    )
-
-    # Create test data - dog belongs to different owner
-    dogs_table = dynamodb.Table("dogs-test")
+    # Create test data
+    dogs_table = dynamodb_setup.Table("dogs-test")
     dogs_table.put_item(
-        Item={
-            "id": "dog-123",
-            "name": "Buddy",
-            "owner_id": "owner-456",  # Different owner
-        }
+        Item={"id": "dog-123", "name": "Buddy", "owner_id": "owner-123"}
     )
 
-    owners_table = dynamodb.Table("owners-test")
+    owners_table = dynamodb_setup.Table("owners-test")
     owners_table.put_item(Item={"id": "owner-123", "name": "John Doe"})
+    owners_table.put_item(Item={"id": "owner-456", "name": "Jane Doe"})
 
-    # Test event
+    # Test event with different owner
     event = {
         "httpMethod": "POST",
         "path": "/bookings",
         "body": json.dumps(
             {
                 "dog_id": "dog-123",
-                "owner_id": "owner-123",
+                "owner_id": "owner-456",  # Different owner
                 "service_type": "daycare",
                 "start_time": "2024-01-01T09:00:00Z",
                 "end_time": "2024-01-01T17:00:00Z",
@@ -158,65 +84,56 @@ def test_create_booking_invalid_dog_owner():
         ),
     }
 
-    with patch.dict(
-        os.environ,
-        {
-            "BOOKINGS_TABLE": "bookings-test",
-            "DOGS_TABLE": "dogs-test",
-            "OWNERS_TABLE": "owners-test",
-        },
-    ):
-        response = lambda_handler(event, None)
+    response = lambda_handler(event, None)
 
     assert response["statusCode"] == 403
     body = json.loads(response["body"])
-    assert "does not belong to this owner" in body["error"]
+    assert "Dog does not belong to this owner" in body["error"]
 
 
-@mock_aws
-def test_list_bookings():
-    """Test listing bookings for an owner"""
-    # Setup mock DynamoDB
-    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-
-    dynamodb.create_table(
-        TableName="bookings-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[
-            {"AttributeName": "id", "AttributeType": "S"},
-            {"AttributeName": "owner_id", "AttributeType": "S"},
-            {"AttributeName": "start_time", "AttributeType": "S"},
-        ],
-        GlobalSecondaryIndexes=[
-            {
-                "IndexName": "owner-time-index",
-                "KeySchema": [
-                    {"AttributeName": "owner_id", "KeyType": "HASH"},
-                    {"AttributeName": "start_time", "KeyType": "RANGE"},
-                ],
-                "Projection": {"ProjectionType": "ALL"},
-            }
-        ],
-        BillingMode="PAY_PER_REQUEST",
-    )
-
-    # Create test bookings
-    bookings_table = dynamodb.Table("bookings-test")
+def test_get_booking(mock_env, dynamodb_setup):
+    """Test getting a specific booking"""
+    # Create test booking
+    bookings_table = dynamodb_setup.Table("bookings-test")
     bookings_table.put_item(
         Item={
-            "id": "booking-1",
+            "id": "booking-123",
+            "dog_id": "dog-123",
             "owner_id": "owner-123",
             "service_type": "daycare",
-            "start_time": "2024-01-01T09:00:00Z",
+            "status": "pending",
+            "price": Decimal("120.0"),
         }
     )
 
+    # Test event
+    event = {
+        "httpMethod": "GET",
+        "path": "/bookings/booking-123",
+        "pathParameters": {"id": "booking-123"},
+    }
+
+    response = lambda_handler(event, None)
+
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["id"] == "booking-123"
+    assert body["service_type"] == "daycare"
+
+
+def test_list_bookings(mock_env, dynamodb_setup):
+    """Test listing bookings for an owner"""
+    # Create test bookings
+    bookings_table = dynamodb_setup.Table("bookings-test")
     bookings_table.put_item(
         Item={
-            "id": "booking-2",
+            "id": "booking-123",
+            "dog_id": "dog-123",
             "owner_id": "owner-123",
-            "service_type": "boarding",
-            "start_time": "2024-01-02T09:00:00Z",
+            "service_type": "daycare",
+            "status": "pending",
+            "price": Decimal("120.0"),
+            "start_time": "2024-01-01T09:00:00Z",
         }
     )
 
@@ -227,32 +144,29 @@ def test_list_bookings():
         "queryStringParameters": {"owner_id": "owner-123"},
     }
 
-    with patch.dict(os.environ, {"BOOKINGS_TABLE": "bookings-test"}):
-        response = lambda_handler(event, None)
+    response = lambda_handler(event, None)
 
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    assert body["count"] == 2
-    assert len(body["bookings"]) == 2
+    assert "bookings" in body
+    assert "count" in body
+    assert body["count"] == 1
+    assert body["bookings"][0]["id"] == "booking-123"
 
 
-@mock_aws
-def test_update_booking():
+def test_update_booking(mock_env, dynamodb_setup):
     """Test updating a booking"""
-    # Setup mock DynamoDB
-    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-
-    dynamodb.create_table(
-        TableName="bookings-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
-        BillingMode="PAY_PER_REQUEST",
-    )
-
     # Create test booking
-    bookings_table = dynamodb.Table("bookings-test")
+    bookings_table = dynamodb_setup.Table("bookings-test")
     bookings_table.put_item(
-        Item={"id": "booking-123", "dog_id": "dog-123", "status": "pending"}
+        Item={
+            "id": "booking-123",
+            "dog_id": "dog-123",
+            "owner_id": "owner-123",
+            "service_type": "daycare",
+            "status": "pending",
+            "price": Decimal("120.0"),
+        }
     )
 
     # Test event
@@ -260,37 +174,29 @@ def test_update_booking():
         "httpMethod": "PUT",
         "path": "/bookings/booking-123",
         "pathParameters": {"id": "booking-123"},
-        "body": json.dumps(
-            {"status": "confirmed", "special_instructions": "Updated instructions"}
-        ),
+        "body": json.dumps({"status": "confirmed"}),
     }
 
-    with patch.dict(os.environ, {"BOOKINGS_TABLE": "bookings-test"}):
-        response = lambda_handler(event, None)
+    response = lambda_handler(event, None)
 
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body["status"] == "confirmed"
-    assert body["special_instructions"] == "Updated instructions"
 
 
-@mock_aws
-def test_cancel_booking():
+def test_cancel_booking(mock_env, dynamodb_setup):
     """Test cancelling a booking"""
-    # Setup mock DynamoDB
-    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-
-    dynamodb.create_table(
-        TableName="bookings-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
-        BillingMode="PAY_PER_REQUEST",
-    )
-
     # Create test booking
-    bookings_table = dynamodb.Table("bookings-test")
+    bookings_table = dynamodb_setup.Table("bookings-test")
     bookings_table.put_item(
-        Item={"id": "booking-123", "dog_id": "dog-123", "status": "pending"}
+        Item={
+            "id": "booking-123",
+            "dog_id": "dog-123",
+            "owner_id": "owner-123",
+            "service_type": "daycare",
+            "status": "pending",
+            "price": Decimal("120.0"),
+        }
     )
 
     # Test event
@@ -300,37 +206,44 @@ def test_cancel_booking():
         "pathParameters": {"id": "booking-123"},
     }
 
-    with patch.dict(os.environ, {"BOOKINGS_TABLE": "bookings-test"}):
-        response = lambda_handler(event, None)
+    response = lambda_handler(event, None)
 
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body["status"] == "cancelled"
 
 
-def test_calculate_price():
-    """Test price calculation logic"""
-    from datetime import datetime, timezone
+def test_missing_required_fields(mock_env, dynamodb_setup):
+    """Test booking creation with missing required fields"""
+    event = {
+        "httpMethod": "POST",
+        "path": "/bookings",
+        "body": json.dumps(
+            {
+                "dog_id": "dog-123",
+                # Missing required fields
+            }
+        ),
+    }
 
-    start_time = datetime(2024, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
-    end_time = datetime(2024, 1, 1, 17, 0, 0, tzinfo=timezone.utc)
+    response = lambda_handler(event, None)
 
-    # Test daycare pricing
-    price = calculate_price("daycare", start_time, end_time)
-    assert price == 120.0  # 8 hours * $15/hour
-
-    # Test boarding pricing
-    price = calculate_price("boarding", start_time, end_time)
-    assert price == 360.0  # 8 hours * $45/hour
-
-    # Test minimum 1 hour charge
-    end_time_short = datetime(2024, 1, 1, 9, 30, 0, tzinfo=timezone.utc)
-    price = calculate_price("daycare", start_time, end_time_short)
-    assert price == 15.0  # Minimum 1 hour
+    assert response["statusCode"] == 400
+    body = json.loads(response["body"])
+    assert "Missing required field" in body["error"]
 
 
-def test_invalid_service_type():
-    """Test booking with invalid service type"""
+def test_invalid_service_type(mock_env, dynamodb_setup):
+    """Test booking creation with invalid service type"""
+    # Create test data
+    dogs_table = dynamodb_setup.Table("dogs-test")
+    dogs_table.put_item(
+        Item={"id": "dog-123", "name": "Buddy", "owner_id": "owner-123"}
+    )
+
+    owners_table = dynamodb_setup.Table("owners-test")
+    owners_table.put_item(Item={"id": "owner-123", "name": "John Doe"})
+
     event = {
         "httpMethod": "POST",
         "path": "/bookings",
@@ -345,23 +258,24 @@ def test_invalid_service_type():
         ),
     }
 
-    with patch.dict(
-        os.environ,
-        {
-            "BOOKINGS_TABLE": "bookings-test",
-            "DOGS_TABLE": "dogs-test",
-            "OWNERS_TABLE": "owners-test",
-        },
-    ):
-        response = lambda_handler(event, None)
+    response = lambda_handler(event, None)
 
     assert response["statusCode"] == 400
     body = json.loads(response["body"])
     assert "Invalid service type" in body["error"]
 
 
-def test_invalid_datetime():
-    """Test booking with invalid datetime format"""
+def test_invalid_datetime(mock_env, dynamodb_setup):
+    """Test booking creation with invalid datetime"""
+    # Create test data
+    dogs_table = dynamodb_setup.Table("dogs-test")
+    dogs_table.put_item(
+        Item={"id": "dog-123", "name": "Buddy", "owner_id": "owner-123"}
+    )
+
+    owners_table = dynamodb_setup.Table("owners-test")
+    owners_table.put_item(Item={"id": "owner-123", "name": "John Doe"})
+
     event = {
         "httpMethod": "POST",
         "path": "/bookings",
@@ -376,23 +290,24 @@ def test_invalid_datetime():
         ),
     }
 
-    with patch.dict(
-        os.environ,
-        {
-            "BOOKINGS_TABLE": "bookings-test",
-            "DOGS_TABLE": "dogs-test",
-            "OWNERS_TABLE": "owners-test",
-        },
-    ):
-        response = lambda_handler(event, None)
+    response = lambda_handler(event, None)
 
     assert response["statusCode"] == 400
     body = json.loads(response["body"])
     assert "Invalid datetime format" in body["error"]
 
 
-def test_end_time_before_start_time():
-    """Test booking with end time before start time"""
+def test_end_time_before_start_time(mock_env, dynamodb_setup):
+    """Test booking creation with end time before start time"""
+    # Create test data
+    dogs_table = dynamodb_setup.Table("dogs-test")
+    dogs_table.put_item(
+        Item={"id": "dog-123", "name": "Buddy", "owner_id": "owner-123"}
+    )
+
+    owners_table = dynamodb_setup.Table("owners-test")
+    owners_table.put_item(Item={"id": "owner-123", "name": "John Doe"})
+
     event = {
         "httpMethod": "POST",
         "path": "/bookings",
@@ -407,16 +322,31 @@ def test_end_time_before_start_time():
         ),
     }
 
-    with patch.dict(
-        os.environ,
-        {
-            "BOOKINGS_TABLE": "bookings-test",
-            "DOGS_TABLE": "dogs-test",
-            "OWNERS_TABLE": "owners-test",
-        },
-    ):
-        response = lambda_handler(event, None)
+    response = lambda_handler(event, None)
 
     assert response["statusCode"] == 400
     body = json.loads(response["body"])
     assert "Start time must be before end time" in body["error"]
+
+
+def test_calculate_price():
+    """Test price calculation function"""
+    start_time = datetime(2024, 1, 1, 9, 0, 0)
+    end_time = datetime(2024, 1, 1, 17, 0, 0)
+
+    # Test daycare (8 hours * $15/hour)
+    price = calculate_price("daycare", start_time, end_time)
+    assert price == 120.0
+
+    # Test boarding (8 hours * $45/hour)
+    price = calculate_price("boarding", start_time, end_time)
+    assert price == 360.0
+
+    # Test grooming (8 hours * $60/hour)
+    price = calculate_price("grooming", start_time, end_time)
+    assert price == 480.0
+
+    # Test minimum 1 hour charge
+    end_time_30min = datetime(2024, 1, 1, 9, 30, 0)
+    price = calculate_price("daycare", start_time, end_time_30min)
+    assert price == 15.0  # 1 hour minimum

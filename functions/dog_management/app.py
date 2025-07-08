@@ -121,6 +121,15 @@ def create_dog(dogs_table, owners_table, event):
         if "Item" not in owner_response:
             return create_response(404, {"error": "Owner not found"})
 
+        # Validate age
+        if not isinstance(body["age"], int) or body["age"] < 0:
+            return create_response(400, {"error": "Age must be positive integer"})
+
+        # Validate size
+        valid_sizes = ["small", "medium", "large"]
+        if body["size"] not in valid_sizes:
+            return create_response(400, {"error": f"Invalid size. Must be one of: {valid_sizes}"})
+
         # Create dog record
         dog_id = f"dog-{uuid.uuid4()}"
         now = datetime.now(timezone.utc).isoformat()
@@ -167,6 +176,7 @@ def update_dog(table, dog_id, event):
         # Build update expression
         update_expression = "SET updated_at = :updated_at"
         expression_values = {":updated_at": datetime.now(timezone.utc).isoformat()}
+        expression_names = {}
 
         # Update allowed fields
         allowed_fields = [
@@ -180,16 +190,31 @@ def update_dog(table, dog_id, event):
         ]
         for field in allowed_fields:
             if field in body:
-                update_expression += f", {field} = :{field}"
-                expression_values[f":{field}"] = body[field]
+                if field == "name":
+                    # Handle reserved keyword
+                    update_expression += f", #name = :name"
+                    expression_names["#name"] = "name"
+                    expression_values[":name"] = body[field]
+                elif field == "size":
+                    # Handle reserved keyword
+                    update_expression += f", #size = :size"
+                    expression_names["#size"] = "size"
+                    expression_values[":size"] = body[field]
+                else:
+                    update_expression += f", {field} = :{field}"
+                    expression_values[f":{field}"] = body[field]
 
         # Update the item
-        response = table.update_item(
-            Key={"id": dog_id},
-            UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_values,
-            ReturnValues="ALL_NEW",
-        )
+        kwargs = {
+            "Key": {"id": dog_id},
+            "UpdateExpression": update_expression,
+            "ExpressionAttributeValues": expression_values,
+            "ReturnValues": "ALL_NEW",
+        }
+        if expression_names:
+            kwargs["ExpressionAttributeNames"] = expression_names
+        
+        response = table.update_item(**kwargs)
 
         logger.info(f"Updated dog: {dog_id}")
         return create_response(200, response["Attributes"])

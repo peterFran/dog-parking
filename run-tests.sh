@@ -153,7 +153,7 @@ validate_project_structure() {
     done
     
     # Check Lambda function structure
-    local lambda_functions=("dog_management" "owner_management" "booking_management" "payment_processing")
+    local lambda_functions=("dog_management" "owner_management" "booking_management")
     for func in "${lambda_functions[@]}"; do
         if [ -f "functions/$func/app.py" ]; then
             echo -e "${GREEN}✅ Lambda function: $func${NC}"

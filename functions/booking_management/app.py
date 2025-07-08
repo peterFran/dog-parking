@@ -208,6 +208,7 @@ def update_booking(table, booking_id, event):
         # Build update expression
         update_expression = "SET updated_at = :updated_at"
         expression_values = {":updated_at": datetime.now(timezone.utc).isoformat()}
+        expression_names = {}
 
         # Update allowed fields
         allowed_fields = [
@@ -219,16 +220,26 @@ def update_booking(table, booking_id, event):
         ]
         for field in allowed_fields:
             if field in body:
-                update_expression += f", {field} = :{field}"
-                expression_values[f":{field}"] = body[field]
+                if field == "status":
+                    # Handle reserved keyword
+                    update_expression += f", #status = :status"
+                    expression_names["#status"] = "status"
+                    expression_values[":status"] = body[field]
+                else:
+                    update_expression += f", {field} = :{field}"
+                    expression_values[f":{field}"] = body[field]
 
         # Update the item
-        response = table.update_item(
-            Key={"id": booking_id},
-            UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_values,
-            ReturnValues="ALL_NEW",
-        )
+        kwargs = {
+            "Key": {"id": booking_id},
+            "UpdateExpression": update_expression,
+            "ExpressionAttributeValues": expression_values,
+            "ReturnValues": "ALL_NEW",
+        }
+        if expression_names:
+            kwargs["ExpressionAttributeNames"] = expression_names
+        
+        response = table.update_item(**kwargs)
 
         logger.info(f"Updated booking: {booking_id}")
         return create_response(200, response["Attributes"])
