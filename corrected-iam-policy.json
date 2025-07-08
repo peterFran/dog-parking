@@ -23,6 +23,7 @@
                 "cloudformation:DescribeStackEvents",
                 "cloudformation:CreateStack",
                 "cloudformation:GetTemplate",
+                "cloudformation:GetTemplateSummary",
                 "cloudformation:DeleteStack",
                 "cloudformation:DescribeStackResources",
                 "cloudformation:UpdateStack",
