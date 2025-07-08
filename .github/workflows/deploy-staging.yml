@@ -108,20 +108,22 @@ jobs:
           --s3-bucket $BUCKET_NAME \
           --debug
           
-    - name: Fix corrupted SAM stack and retry
+    - name: Fix deployment failures and retry
       if: failure()
       run: |
-        echo "🔧 Deployment failed, checking for corrupted SAM managed stack..."
+        echo "🔧 Deployment failed, checking for stack issues..."
         
-        # Check if the error is related to aws-sam-cli-managed-default
-        if aws cloudformation describe-stacks --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }} --query 'Stacks[0].StackStatus' --output text 2>/dev/null | grep -q "REVIEW_IN_PROGRESS"; then
-          echo "🗑️  Found corrupted SAM managed stack, deleting it..."
-          aws cloudformation delete-stack --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }}
+        # Check if the main stack is in ROLLBACK_COMPLETE state
+        MAIN_STACK_STATUS=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --region ${{ env.AWS_REGION }} --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+        
+        if [ "$MAIN_STACK_STATUS" = "ROLLBACK_COMPLETE" ]; then
+          echo "🗑️  Main stack is in ROLLBACK_COMPLETE state, deleting it..."
+          aws cloudformation delete-stack --stack-name ${{ env.STACK_NAME }} --region ${{ env.AWS_REGION }}
           
-          echo "⏳ Waiting for stack deletion..."
-          aws cloudformation wait stack-delete-complete --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }}
+          echo "⏳ Waiting for main stack deletion..."
+          aws cloudformation wait stack-delete-complete --stack-name ${{ env.STACK_NAME }} --region ${{ env.AWS_REGION }}
           
-          echo "🔄 Retrying SAM deployment..."
+          echo "🔄 Retrying SAM deployment after main stack deletion..."
           
           # Create a unique S3 bucket name for retry
           RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}-retry"
@@ -143,8 +145,40 @@ jobs:
             --no-confirm-changeset \
             --s3-bucket $RETRY_BUCKET_NAME \
             --debug
+            
+        # Also check if the error is related to aws-sam-cli-managed-default
+        elif aws cloudformation describe-stacks --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }} --query 'Stacks[0].StackStatus' --output text 2>/dev/null | grep -q "REVIEW_IN_PROGRESS"; then
+          echo "🗑️  Found corrupted SAM managed stack, deleting it..."
+          aws cloudformation delete-stack --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }}
+          
+          echo "⏳ Waiting for SAM managed stack deletion..."
+          aws cloudformation wait stack-delete-complete --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }}
+          
+          echo "🔄 Retrying SAM deployment after SAM managed stack deletion..."
+          
+          # Create a unique S3 bucket name for retry
+          RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}-retry2"
+          echo "📦 Using retry S3 bucket: $RETRY_BUCKET_NAME"
+          
+          # Create the S3 bucket for retry
+          aws s3 mb s3://$RETRY_BUCKET_NAME --region ${{ env.AWS_REGION }} || {
+            echo "⚠️  Retry bucket creation failed, using fallback name..."
+            RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-retry2"
+          }
+          
+          sam deploy \
+            --template-file .aws-sam/build/template.yaml \
+            --stack-name ${{ env.STACK_NAME }} \
+            --parameter-overrides Environment=staging \
+            --capabilities CAPABILITY_IAM \
+            --region ${{ env.AWS_REGION }} \
+            --no-fail-on-empty-changeset \
+            --no-confirm-changeset \
+            --s3-bucket $RETRY_BUCKET_NAME \
+            --debug
         else
-          echo "❌ Different deployment error, not related to corrupted SAM stack"
+          echo "❌ Different deployment error, checking for specific issues..."
+          echo "Main stack status: $MAIN_STACK_STATUS"
           exit 1
         fi
           
