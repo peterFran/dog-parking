@@ -9,12 +9,14 @@ import pytest
 from decimal import Decimal
 
 # Add the functions directory to the path
-booking_management_dir = os.path.join(os.path.dirname(__file__), "../../functions/booking_management")
+booking_management_dir = os.path.join(
+    os.path.dirname(__file__), "../../functions/booking_management"
+)
 sys.path.insert(0, booking_management_dir)
 
 # Remove any existing app module to avoid conflicts
-if 'app' in sys.modules:
-    del sys.modules['app']
+if "app" in sys.modules:
+    del sys.modules["app"]
 
 from app import lambda_handler, calculate_price
 

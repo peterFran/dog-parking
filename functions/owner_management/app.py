@@ -22,11 +22,13 @@ def lambda_handler(event, context):
     """
     try:
         # Initialize DynamoDB resource - use local endpoint if available
-        dynamodb_kwargs = {"region_name": os.environ.get("AWS_DEFAULT_REGION", "us-east-1")}
+        dynamodb_kwargs = {
+            "region_name": os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        }
         if os.environ.get("AWS_SAM_LOCAL"):
             dynamodb_kwargs["endpoint_url"] = "http://dynamodb-local:8000"
         dynamodb = boto3.resource("dynamodb", **dynamodb_kwargs)
-        
+
         # Get environment variables
         owners_table_name = os.environ.get("OWNERS_TABLE")
         owners_table = dynamodb.Table(owners_table_name)
@@ -126,7 +128,7 @@ def update_owner_profile(table, event):
         }
         if expression_names:
             update_params["ExpressionAttributeNames"] = expression_names
-        
+
         response = table.update_item(**update_params)
 
         logger.info(f"Updated owner: {owner_id}")
@@ -159,9 +161,10 @@ def register_owner(table, event):
 
         # Check if email already exists
         from boto3.dynamodb.conditions import Key
+
         existing_owner = table.query(
             IndexName="email-index",
-            KeyConditionExpression=Key("email").eq(body["email"])
+            KeyConditionExpression=Key("email").eq(body["email"]),
         )
 
         if existing_owner.get("Items"):
@@ -202,6 +205,7 @@ def validate_email(email):
 
 def create_response(status_code, body):
     """Create a standardized API response"""
+
     def default_serializer(o):
         if isinstance(o, decimal.Decimal):
             return float(o)

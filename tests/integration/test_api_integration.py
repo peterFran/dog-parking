@@ -9,7 +9,7 @@ import time
 def is_api_available():
     """Check if the API is available for integration testing"""
     api_base_url = os.environ.get("API_BASE_URL", "http://127.0.0.1:3000")
-    
+
     # Check if API is accessible
     try:
         response = requests.get(f"{api_base_url}/health", timeout=2)
@@ -26,7 +26,7 @@ def is_api_available():
 # Skip all integration tests if API is not available
 pytestmark = pytest.mark.skipif(
     not is_api_available(),
-    reason="API not available for integration testing. Start the API with 'sam local start-api' or set API_BASE_URL environment variable."
+    reason="API not available for integration testing. Start the API with 'sam local start-api' or set API_BASE_URL environment variable.",
 )
 
 # Integration tests for the Dog Care API
@@ -267,8 +267,6 @@ class TestAPIIntegration:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "confirmed"
-
-
 
     def test_11_update_booking(self):
         """Test updating booking after confirmation"""

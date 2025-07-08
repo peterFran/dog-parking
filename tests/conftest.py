@@ -45,7 +45,7 @@ def dynamodb_setup(aws_credentials):
     """Set up mock DynamoDB for testing"""
     with mock_aws():
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-        
+
         # Create test tables
         tables = {
             "dogs-test": {
@@ -95,7 +95,7 @@ def dynamodb_setup(aws_credentials):
                 ],
             },
         }
-        
+
         for table_name, table_config in tables.items():
             dynamodb.create_table(
                 TableName=table_name,
@@ -104,5 +104,5 @@ def dynamodb_setup(aws_credentials):
                 GlobalSecondaryIndexes=table_config.get("GlobalSecondaryIndexes", []),
                 BillingMode="PAY_PER_REQUEST",
             )
-        
+
         yield dynamodb

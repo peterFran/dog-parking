@@ -6,12 +6,14 @@ import sys
 import os
 
 # Add the functions directory to the path
-owner_management_dir = os.path.join(os.path.dirname(__file__), "../../functions/owner_management")
+owner_management_dir = os.path.join(
+    os.path.dirname(__file__), "../../functions/owner_management"
+)
 sys.path.insert(0, owner_management_dir)
 
 # Remove any existing app module to avoid conflicts
-if 'app' in sys.modules:
-    del sys.modules['app']
+if "app" in sys.modules:
+    del sys.modules["app"]
 
 from app import lambda_handler
 

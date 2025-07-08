@@ -21,11 +21,13 @@ def lambda_handler(event, context):
     """
     try:
         # Initialize DynamoDB resource - use local endpoint if available
-        dynamodb_kwargs = {"region_name": os.environ.get("AWS_DEFAULT_REGION", "us-east-1")}
+        dynamodb_kwargs = {
+            "region_name": os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        }
         if os.environ.get("AWS_SAM_LOCAL"):
             dynamodb_kwargs["endpoint_url"] = "http://dynamodb-local:8000"
         dynamodb = boto3.resource("dynamodb", **dynamodb_kwargs)
-        
+
         # Get environment variables
         dogs_table_name = os.environ.get("DOGS_TABLE")
         owners_table_name = os.environ.get("OWNERS_TABLE")
@@ -88,9 +90,9 @@ def list_dogs(table, event):
 
         # Query using GSI
         from boto3.dynamodb.conditions import Key
+
         response = table.query(
-            IndexName="owner-index",
-            KeyConditionExpression=Key("owner_id").eq(owner_id)
+            IndexName="owner-index", KeyConditionExpression=Key("owner_id").eq(owner_id)
         )
 
         dogs = response.get("Items", [])
@@ -128,7 +130,9 @@ def create_dog(dogs_table, owners_table, event):
         # Validate size
         valid_sizes = ["small", "medium", "large"]
         if body["size"] not in valid_sizes:
-            return create_response(400, {"error": f"Invalid size. Must be one of: {valid_sizes}"})
+            return create_response(
+                400, {"error": f"Invalid size. Must be one of: {valid_sizes}"}
+            )
 
         # Create dog record
         dog_id = f"dog-{uuid.uuid4()}"
@@ -213,7 +217,7 @@ def update_dog(table, dog_id, event):
         }
         if expression_names:
             kwargs["ExpressionAttributeNames"] = expression_names
-        
+
         response = table.update_item(**kwargs)
 
         logger.info(f"Updated dog: {dog_id}")
@@ -258,8 +262,10 @@ def delete_dog(table, dog_id):
 #         "body": json.dumps(body) if body else "",
 #     }
 
+
 def create_response(status_code, body):
     """Create a standardized API response"""
+
     def default_serializer(o):
         if isinstance(o, decimal.Decimal):
             return float(o)

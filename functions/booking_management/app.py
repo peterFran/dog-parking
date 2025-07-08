@@ -21,11 +21,13 @@ def lambda_handler(event, context):
     """
     try:
         # Initialize DynamoDB resource - use local endpoint if available
-        dynamodb_kwargs = {"region_name": os.environ.get("AWS_DEFAULT_REGION", "us-east-1")}
+        dynamodb_kwargs = {
+            "region_name": os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        }
         if os.environ.get("AWS_SAM_LOCAL"):
             dynamodb_kwargs["endpoint_url"] = "http://dynamodb-local:8000"
         dynamodb = boto3.resource("dynamodb", **dynamodb_kwargs)
-        
+
         # Get environment variables
         bookings_table_name = os.environ.get("BOOKINGS_TABLE")
         dogs_table_name = os.environ.get("DOGS_TABLE")
@@ -90,6 +92,7 @@ def list_bookings(table, event):
 
         # Query using GSI
         from boto3.dynamodb.conditions import Key
+
         response = table.query(
             IndexName="owner-time-index",
             KeyConditionExpression=Key("owner_id").eq(owner_id),
@@ -238,7 +241,7 @@ def update_booking(table, booking_id, event):
         }
         if expression_names:
             kwargs["ExpressionAttributeNames"] = expression_names
-        
+
         response = table.update_item(**kwargs)
 
         logger.info(f"Updated booking: {booking_id}")
@@ -303,6 +306,7 @@ def calculate_price(service_type, start_time, end_time):
 
 def create_response(status_code, body):
     """Create a standardized API response"""
+
     def default_serializer(o):
         if isinstance(o, decimal.Decimal):
             return float(o)
