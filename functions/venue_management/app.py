@@ -41,7 +41,13 @@ def lambda_handler(event, context):
         path_parameters = event.get("pathParameters") or {}
 
         # Route to appropriate handler
-        if "/venues" in path:
+        if "/venues/" in path and "/slots" in path:
+            venue_id = path_parameters.get("id")
+            if http_method == "GET":
+                return get_venue_slots(venues_table, venue_id, event)
+            elif http_method == "POST":
+                return update_venue_slots(venues_table, venue_id, event)
+        elif "/venues" in path:
             if http_method == "GET":
                 if path_parameters.get("id"):
                     return get_venue(venues_table, path_parameters["id"])
@@ -53,12 +59,6 @@ def lambda_handler(event, context):
                 return update_venue(venues_table, path_parameters["id"], event)
             elif http_method == "DELETE":
                 return delete_venue(venues_table, path_parameters["id"])
-        elif "/venues/" in path and "/slots" in path:
-            venue_id = path_parameters.get("id")
-            if http_method == "GET":
-                return get_venue_slots(venues_table, venue_id, event)
-            elif http_method == "POST":
-                return update_venue_slots(venues_table, venue_id, event)
         else:
             return create_response(404, {"error": "Endpoint not found"})
 
