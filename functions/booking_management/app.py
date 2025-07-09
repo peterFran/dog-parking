@@ -329,7 +329,7 @@ def check_venue_availability(venue, start_time, end_time):
         
         # Check slot availability
         available_slots = venue.get("available_slots", {})
-        slot_duration = timedelta(minutes=venue.get("slot_duration", 60))
+        slot_duration = timedelta(minutes=int(venue.get("slot_duration", 60)))
         
         # Generate time slots for the booking period
         current_time = start_time

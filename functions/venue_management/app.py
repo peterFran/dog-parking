@@ -354,7 +354,7 @@ def generate_slots_for_date(venue, date_str):
         
         # Generate slots
         slots = []
-        slot_duration = timedelta(minutes=venue.get("slot_duration", 60))
+        slot_duration = timedelta(minutes=int(venue.get("slot_duration", 60)))
         
         current_time = datetime.combine(date_obj, start_time)
         end_datetime = datetime.combine(date_obj, end_time)
