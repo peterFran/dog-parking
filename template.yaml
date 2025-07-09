@@ -140,6 +140,18 @@ Resources:
                 type: aws_proxy
                 httpMethod: POST
                 uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+          /docs:
+            get:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DocsFunction.Arn}/invocations"
+          /openapi.json:
+            get:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DocsFunction.Arn}/invocations"
 
   # Lambda Functions
   DogManagementFunction:
@@ -229,25 +241,6 @@ Resources:
       FunctionName: !Sub "docs-${Environment}"
       CodeUri: functions/docs/
       Handler: app.lambda_handler
-      Events:
-        DocsApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref DogCareApi
-            Path: /docs
-            Method: GET
-        DocsApiSlash:
-          Type: Api
-          Properties:
-            RestApiId: !Ref DogCareApi
-            Path: /docs/
-            Method: GET
-        OpenApiSpec:
-          Type: Api
-          Properties:
-            RestApiId: !Ref DogCareApi
-            Path: /openapi.json
-            Method: GET
 
   # API Gateway Lambda Permissions
   VenueManagementApiPermission:
@@ -273,6 +266,22 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DogCareApi}/*/venues/*"
+
+  DocsApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DocsFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DogCareApi}/*/docs"
+
+  DocsApiPermissionOpenApi:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DocsFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DogCareApi}/*/openapi.json"
 
 
   # DynamoDB Tables

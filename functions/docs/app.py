@@ -288,7 +288,7 @@ def lambda_handler(event, context):
     <script>
         window.onload = function() {{
             const ui = SwaggerUIBundle({{
-                url: '{event.get("headers", {}).get("Host", "")}/{event.get("requestContext", {}).get("stage", "")}/openapi.json',
+                url: 'https://{event.get("headers", {}).get("Host", "")}/{event.get("requestContext", {}).get("stage", "")}/openapi.json',
                 dom_id: '#swagger-ui',
                 deepLinking: true,
                 presets: [
