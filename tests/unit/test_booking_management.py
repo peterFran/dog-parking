@@ -32,6 +32,16 @@ def test_create_booking(mock_env, dynamodb_setup):
     owners_table = dynamodb_setup.Table("owners-test")
     owners_table.put_item(Item={"id": "owner-123", "name": "John Doe"})
 
+    venues_table = dynamodb_setup.Table("venues-test")
+    venues_table.put_item(Item={
+        "id": "venue-123", 
+        "name": "Test Venue", 
+        "capacity": 20,
+        "operating_hours": {
+            "monday": {"open": True, "start": "08:00", "end": "18:00"}
+        }
+    })
+
     # Test event
     event = {
         "httpMethod": "POST",
@@ -40,6 +50,7 @@ def test_create_booking(mock_env, dynamodb_setup):
             {
                 "dog_id": "dog-123",
                 "owner_id": "owner-123",
+                "venue_id": "venue-123",
                 "service_type": "daycare",
                 "start_time": "2024-01-01T09:00:00Z",
                 "end_time": "2024-01-01T17:00:00Z",
@@ -71,6 +82,16 @@ def test_create_booking_invalid_dog_owner(mock_env, dynamodb_setup):
     owners_table.put_item(Item={"id": "owner-123", "name": "John Doe"})
     owners_table.put_item(Item={"id": "owner-456", "name": "Jane Doe"})
 
+    venues_table = dynamodb_setup.Table("venues-test")
+    venues_table.put_item(Item={
+        "id": "venue-123", 
+        "name": "Test Venue", 
+        "capacity": 20,
+        "operating_hours": {
+            "monday": {"open": True, "start": "08:00", "end": "18:00"}
+        }
+    })
+
     # Test event with different owner
     event = {
         "httpMethod": "POST",
@@ -79,6 +100,7 @@ def test_create_booking_invalid_dog_owner(mock_env, dynamodb_setup):
             {
                 "dog_id": "dog-123",
                 "owner_id": "owner-456",  # Different owner
+                "venue_id": "venue-123",
                 "service_type": "daycare",
                 "start_time": "2024-01-01T09:00:00Z",
                 "end_time": "2024-01-01T17:00:00Z",
@@ -246,6 +268,16 @@ def test_invalid_service_type(mock_env, dynamodb_setup):
     owners_table = dynamodb_setup.Table("owners-test")
     owners_table.put_item(Item={"id": "owner-123", "name": "John Doe"})
 
+    venues_table = dynamodb_setup.Table("venues-test")
+    venues_table.put_item(Item={
+        "id": "venue-123", 
+        "name": "Test Venue", 
+        "capacity": 20,
+        "operating_hours": {
+            "monday": {"open": True, "start": "08:00", "end": "18:00"}
+        }
+    })
+
     event = {
         "httpMethod": "POST",
         "path": "/bookings",
@@ -253,6 +285,7 @@ def test_invalid_service_type(mock_env, dynamodb_setup):
             {
                 "dog_id": "dog-123",
                 "owner_id": "owner-123",
+                "venue_id": "venue-123",
                 "service_type": "invalid_service",
                 "start_time": "2024-01-01T09:00:00Z",
                 "end_time": "2024-01-01T17:00:00Z",
@@ -278,6 +311,16 @@ def test_invalid_datetime(mock_env, dynamodb_setup):
     owners_table = dynamodb_setup.Table("owners-test")
     owners_table.put_item(Item={"id": "owner-123", "name": "John Doe"})
 
+    venues_table = dynamodb_setup.Table("venues-test")
+    venues_table.put_item(Item={
+        "id": "venue-123", 
+        "name": "Test Venue", 
+        "capacity": 20,
+        "operating_hours": {
+            "monday": {"open": True, "start": "08:00", "end": "18:00"}
+        }
+    })
+
     event = {
         "httpMethod": "POST",
         "path": "/bookings",
@@ -285,6 +328,7 @@ def test_invalid_datetime(mock_env, dynamodb_setup):
             {
                 "dog_id": "dog-123",
                 "owner_id": "owner-123",
+                "venue_id": "venue-123",
                 "service_type": "daycare",
                 "start_time": "invalid-datetime",
                 "end_time": "2024-01-01T17:00:00Z",
@@ -310,6 +354,16 @@ def test_end_time_before_start_time(mock_env, dynamodb_setup):
     owners_table = dynamodb_setup.Table("owners-test")
     owners_table.put_item(Item={"id": "owner-123", "name": "John Doe"})
 
+    venues_table = dynamodb_setup.Table("venues-test")
+    venues_table.put_item(Item={
+        "id": "venue-123", 
+        "name": "Test Venue", 
+        "capacity": 20,
+        "operating_hours": {
+            "monday": {"open": True, "start": "08:00", "end": "18:00"}
+        }
+    })
+
     event = {
         "httpMethod": "POST",
         "path": "/bookings",
@@ -317,6 +371,7 @@ def test_end_time_before_start_time(mock_env, dynamodb_setup):
             {
                 "dog_id": "dog-123",
                 "owner_id": "owner-123",
+                "venue_id": "venue-123",
                 "service_type": "daycare",
                 "start_time": "2024-01-01T17:00:00Z",
                 "end_time": "2024-01-01T09:00:00Z",
