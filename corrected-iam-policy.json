@@ -70,7 +70,8 @@
             "Resource": [
                 "arn:aws:dynamodb:*:*:table/dogs-*",
                 "arn:aws:dynamodb:*:*:table/owners-*",
-                "arn:aws:dynamodb:*:*:table/bookings-*"
+                "arn:aws:dynamodb:*:*:table/bookings-*",
+                "arn:aws:dynamodb:*:*:table/venues-*"
             ]
         },
         {
@@ -94,7 +95,8 @@
                 "arn:aws:iam::*:role/dog-care-*",
                 "arn:aws:iam::*:role/*DogManagement*",
                 "arn:aws:iam::*:role/*OwnerManagement*",
-                "arn:aws:iam::*:role/*BookingManagement*"
+                "arn:aws:iam::*:role/*BookingManagement*",
+                "arn:aws:iam::*:role/*VenueManagement*"
             ]
         },
         {
@@ -133,7 +135,8 @@
             "Resource": [
                 "arn:aws:lambda:*:*:function:dog-management-*",
                 "arn:aws:lambda:*:*:function:owner-management-*",
-                "arn:aws:lambda:*:*:function:booking-management-*"
+                "arn:aws:lambda:*:*:function:booking-management-*",
+                "arn:aws:lambda:*:*:function:venue-management-*"
             ]
         },
         {
@@ -181,7 +184,8 @@
             "Resource": [
                 "arn:aws:logs:*:*:log-group:/aws/lambda/dog-management-*",
                 "arn:aws:logs:*:*:log-group:/aws/lambda/owner-management-*",
-                "arn:aws:logs:*:*:log-group:/aws/lambda/booking-management-*"
+                "arn:aws:logs:*:*:log-group:/aws/lambda/booking-management-*",
+                "arn:aws:logs:*:*:log-group:/aws/lambda/venue-management-*"
             ]
         }
     ]
