@@ -233,6 +233,20 @@ jobs:
           exit 1
         fi
         
+        echo "Testing venue creation..."
+        VENUE_RESPONSE=$(curl -s -X POST "$API_URL/venues" \
+          -H "Content-Type: application/json" \
+          -d "{\"name\":\"Test Venue\",\"address\":{\"street\":\"123 Test St\",\"city\":\"Test City\",\"state\":\"TS\",\"zip\":\"12345\"},\"capacity\":20,\"operating_hours\":{\"monday\":{\"open\":true,\"start\":\"08:00\",\"end\":\"18:00\"},\"tuesday\":{\"open\":true,\"start\":\"08:00\",\"end\":\"18:00\"},\"wednesday\":{\"open\":true,\"start\":\"08:00\",\"end\":\"18:00\"},\"thursday\":{\"open\":true,\"start\":\"08:00\",\"end\":\"18:00\"},\"friday\":{\"open\":true,\"start\":\"08:00\",\"end\":\"18:00\"},\"saturday\":{\"open\":true,\"start\":\"09:00\",\"end\":\"17:00\"},\"sunday\":{\"open\":false}},\"services\":[\"daycare\",\"boarding\"],\"slot_duration\":60}")
+        
+        VENUE_ID=$(echo "$VENUE_RESPONSE" | jq -r '.id')
+        echo "Venue ID: $VENUE_ID"
+        
+        if [ -z "$VENUE_ID" ]; then
+          echo "❌ Venue creation failed"
+          echo "Full response was: $VENUE_RESPONSE"
+          exit 1
+        fi
+        
         echo "Testing dog registration..."
         DOG_RESPONSE=$(curl -s -X POST "$API_URL/dogs" \
           -H "Content-Type: application/json" \
@@ -249,13 +263,29 @@ jobs:
         echo "Testing booking creation..."
         BOOKING_RESPONSE=$(curl -s -X POST "$API_URL/bookings" \
           -H "Content-Type: application/json" \
-          -d "{\"dog_id\":\"$DOG_ID\",\"owner_id\":\"$OWNER_ID\",\"service_type\":\"daycare\",\"start_time\":\"2024-12-01T09:00:00Z\",\"end_time\":\"2024-12-01T17:00:00Z\"}")
+          -d "{\"dog_id\":\"$DOG_ID\",\"owner_id\":\"$OWNER_ID\",\"venue_id\":\"$VENUE_ID\",\"service_type\":\"daycare\",\"start_time\":\"2024-12-01T09:00:00Z\",\"end_time\":\"2024-12-01T17:00:00Z\"}")
         
         BOOKING_ID=$(echo "$BOOKING_RESPONSE" | jq -r '.id')
         echo "Booking ID: $BOOKING_ID"
         
         if [ -z "$BOOKING_ID" ]; then
           echo "❌ Booking creation failed"
+          echo "Full response was: $BOOKING_RESPONSE"
+          exit 1
+        fi
+        
+        echo "Testing venue slots retrieval..."
+        SLOTS_RESPONSE=$(curl -s -X GET "$API_URL/venues/$VENUE_ID/slots?date=2024-12-01" \
+          -H "Content-Type: application/json")
+        
+        echo "Slots response:"
+        echo "$SLOTS_RESPONSE"
+        
+        # Check if slots response contains expected data
+        if [[ "$SLOTS_RESPONSE" == *"slots"* ]]; then
+          echo "✅ Venue slots retrieval successful"
+        else
+          echo "❌ Venue slots retrieval failed"
           exit 1
         fi
         

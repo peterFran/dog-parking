@@ -21,6 +21,7 @@ Globals:
         DOGS_TABLE: !Ref DogsTable
         OWNERS_TABLE: !Ref OwnersTable
         BOOKINGS_TABLE: !Ref BookingsTable
+        VENUES_TABLE: !Ref VenuesTable
   Api:
     Cors:
       AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
@@ -86,6 +87,24 @@ Resources:
                 type: aws_proxy
                 httpMethod: POST
                 uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BookingManagementFunction.Arn}/invocations"
+          /venues:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+          /venues/{id}:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+          /venues/{id}/slots:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
 
   # Lambda Functions
   DogManagementFunction:
@@ -156,6 +175,37 @@ Resources:
             TableName: !Ref DogsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref OwnersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VenuesTable
+
+  VenueManagementFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "venue-management-${Environment}"
+      CodeUri: functions/venue_management/
+      Handler: app.lambda_handler
+      Events:
+        VenuesApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DogCareApi
+            Path: /venues
+            Method: ANY
+        VenueApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DogCareApi
+            Path: /venues/{id}
+            Method: ANY
+        VenueSlotsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DogCareApi
+            Path: /venues/{id}/slots
+            Method: ANY
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VenuesTable
 
 
   # DynamoDB Tables
@@ -235,6 +285,20 @@ Resources:
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
 
+  VenuesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "venues-${Environment}"
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
 
   # CloudWatch Log Groups
   DogManagementLogGroup:
@@ -253,6 +317,12 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/booking-management-${Environment}"
+      RetentionInDays: 14
+
+  VenueManagementLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/venue-management-${Environment}"
       RetentionInDays: 14
 
 
@@ -280,4 +350,10 @@ Outputs:
     Value: !Ref BookingsTable
     Export:
       Name: !Sub "${AWS::StackName}-BookingsTable"
+
+  VenuesTableName:
+    Description: "DynamoDB table name for Venues"
+    Value: !Ref VenuesTable
+    Export:
+      Name: !Sub "${AWS::StackName}-VenuesTable"
 

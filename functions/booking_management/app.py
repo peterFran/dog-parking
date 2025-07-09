@@ -32,10 +32,12 @@ def lambda_handler(event, context):
         bookings_table_name = os.environ.get("BOOKINGS_TABLE")
         dogs_table_name = os.environ.get("DOGS_TABLE")
         owners_table_name = os.environ.get("OWNERS_TABLE")
+        venues_table_name = os.environ.get("VENUES_TABLE")
 
         bookings_table = dynamodb.Table(bookings_table_name)
         dogs_table = dynamodb.Table(dogs_table_name)
         owners_table = dynamodb.Table(owners_table_name)
+        venues_table = dynamodb.Table(venues_table_name)
 
         # Log the incoming event
         logger.info(f"Received event: {json.dumps(event)}")
@@ -52,7 +54,7 @@ def lambda_handler(event, context):
             else:
                 return list_bookings(bookings_table, event)
         elif http_method == "POST":
-            return create_booking(bookings_table, dogs_table, owners_table, event)
+            return create_booking(bookings_table, dogs_table, owners_table, venues_table, event)
         elif http_method == "PUT":
             return update_booking(bookings_table, path_parameters["id"], event)
         elif http_method == "DELETE":
@@ -108,7 +110,7 @@ def list_bookings(table, event):
         return create_response(500, {"error": "Failed to list bookings"})
 
 
-def create_booking(bookings_table, dogs_table, owners_table, event):
+def create_booking(bookings_table, dogs_table, owners_table, venues_table, event):
     """Create a new booking"""
     try:
         # Parse request body
@@ -118,6 +120,7 @@ def create_booking(bookings_table, dogs_table, owners_table, event):
         required_fields = [
             "dog_id",
             "owner_id",
+            "venue_id",
             "service_type",
             "start_time",
             "end_time",
@@ -142,6 +145,13 @@ def create_booking(bookings_table, dogs_table, owners_table, event):
         if "Item" not in owner_response:
             return create_response(404, {"error": "Owner not found"})
 
+        # Verify venue exists
+        venue_response = venues_table.get_item(Key={"id": body["venue_id"]})
+        if "Item" not in venue_response:
+            return create_response(404, {"error": "Venue not found"})
+        
+        venue = venue_response["Item"]
+
         # Validate service type
         valid_services = ["daycare", "boarding", "grooming", "walking", "training"]
         if body["service_type"] not in valid_services:
@@ -164,6 +174,11 @@ def create_booking(bookings_table, dogs_table, owners_table, event):
         if start_time >= end_time:
             return create_response(400, {"error": "Start time must be before end time"})
 
+        # Check venue availability for the requested time slot
+        availability_check = check_venue_availability(venue, start_time, end_time)
+        if not availability_check["available"]:
+            return create_response(400, {"error": availability_check["message"]})
+
         # Calculate price based on service type and duration
         price = calculate_price(body["service_type"], start_time, end_time)
 
@@ -175,6 +190,7 @@ def create_booking(bookings_table, dogs_table, owners_table, event):
             "id": booking_id,
             "dog_id": body["dog_id"],
             "owner_id": body["owner_id"],
+            "venue_id": body["venue_id"],
             "service_type": body["service_type"],
             "start_time": body["start_time"],
             "end_time": body["end_time"],
@@ -280,6 +296,60 @@ def cancel_booking(table, booking_id):
     except ClientError as e:
         logger.error(f"Error cancelling booking: {str(e)}")
         return create_response(500, {"error": "Failed to cancel booking"})
+
+
+def check_venue_availability(venue, start_time, end_time):
+    """Check if venue has availability for the requested time slot"""
+    from datetime import timedelta
+    
+    # Get date and time from start_time
+    date_str = start_time.strftime("%Y-%m-%d")
+    day_of_week = start_time.strftime("%A").lower()
+    
+    # Check if venue is open on this day
+    operating_hours = venue.get("operating_hours", {})
+    if day_of_week not in operating_hours:
+        return {"available": False, "message": "Venue is not open on this day"}
+    
+    day_hours = operating_hours[day_of_week]
+    if not day_hours.get("open", True):
+        return {"available": False, "message": "Venue is closed on this day"}
+    
+    # Parse venue operating hours
+    try:
+        venue_start = datetime.strptime(day_hours["start"], "%H:%M").time()
+        venue_end = datetime.strptime(day_hours["end"], "%H:%M").time()
+        
+        # Check if booking time is within operating hours
+        booking_start_time = start_time.time()
+        booking_end_time = end_time.time()
+        
+        if booking_start_time < venue_start or booking_end_time > venue_end:
+            return {"available": False, "message": f"Booking time outside operating hours ({day_hours['start']} - {day_hours['end']})"}
+        
+        # Check slot availability
+        available_slots = venue.get("available_slots", {})
+        slot_duration = timedelta(minutes=venue.get("slot_duration", 60))
+        
+        # Generate time slots for the booking period
+        current_time = start_time
+        while current_time < end_time:
+            slot_time_str = current_time.strftime("%H:%M")
+            
+            # Check if this slot has availability
+            slot_capacity = venue["capacity"]  # Default to venue capacity
+            if date_str in available_slots and slot_time_str in available_slots[date_str]:
+                slot_capacity = available_slots[date_str][slot_time_str]
+            
+            if slot_capacity <= 0:
+                return {"available": False, "message": f"No availability at {slot_time_str} on {date_str}"}
+            
+            current_time += slot_duration
+        
+        return {"available": True, "message": "Venue is available for the requested time"}
+        
+    except ValueError as e:
+        return {"available": False, "message": f"Invalid venue operating hours: {str(e)}"}
 
 
 def calculate_price(service_type, start_time, end_time):
