@@ -1,0 +1,2 @@
+# No external dependencies needed for this function
+# Uses only Python standard library

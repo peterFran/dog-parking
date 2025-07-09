@@ -136,7 +136,8 @@
                 "arn:aws:lambda:*:*:function:dog-management-*",
                 "arn:aws:lambda:*:*:function:owner-management-*",
                 "arn:aws:lambda:*:*:function:booking-management-*",
-                "arn:aws:lambda:*:*:function:venue-management-*"
+                "arn:aws:lambda:*:*:function:venue-management-*",
+                "arn:aws:lambda:*:*:function:docs-*"
             ]
         },
         {
@@ -185,7 +186,8 @@
                 "arn:aws:logs:*:*:log-group:/aws/lambda/dog-management-*",
                 "arn:aws:logs:*:*:log-group:/aws/lambda/owner-management-*",
                 "arn:aws:logs:*:*:log-group:/aws/lambda/booking-management-*",
-                "arn:aws:logs:*:*:log-group:/aws/lambda/venue-management-*"
+                "arn:aws:logs:*:*:log-group:/aws/lambda/venue-management-*",
+                "arn:aws:logs:*:*:log-group:/aws/lambda/docs-*"
             ]
         }
     ]
