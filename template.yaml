@@ -88,19 +88,54 @@ Resources:
                 httpMethod: POST
                 uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BookingManagementFunction.Arn}/invocations"
           /venues:
-            x-amazon-apigateway-any-method:
+            get:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+            post:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+            options:
               x-amazon-apigateway-integration:
                 type: aws_proxy
                 httpMethod: POST
                 uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
           /venues/{id}:
-            x-amazon-apigateway-any-method:
+            get:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+            put:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+            delete:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+            options:
               x-amazon-apigateway-integration:
                 type: aws_proxy
                 httpMethod: POST
                 uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
           /venues/{id}/slots:
-            x-amazon-apigateway-any-method:
+            get:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+            post:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+            options:
               x-amazon-apigateway-integration:
                 type: aws_proxy
                 httpMethod: POST
@@ -184,28 +219,34 @@ Resources:
       FunctionName: !Sub "venue-management-${Environment}"
       CodeUri: functions/venue_management/
       Handler: app.lambda_handler
-      Events:
-        VenuesApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref DogCareApi
-            Path: /venues
-            Method: ANY
-        VenueApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref DogCareApi
-            Path: /venues/{id}
-            Method: ANY
-        VenueSlotsApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref DogCareApi
-            Path: /venues/{id}/slots
-            Method: ANY
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref VenuesTable
+
+  # API Gateway Lambda Permissions
+  VenueManagementApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref VenueManagementFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DogCareApi}/*/*"
+
+  VenueManagementApiPermissionVenues:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref VenueManagementFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DogCareApi}/*/venues"
+
+  VenueManagementApiPermissionVenuesId:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref VenueManagementFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DogCareApi}/*/venues/*"
 
 
   # DynamoDB Tables
