@@ -13,12 +13,12 @@ def mock_require_auth(handler_func):
 
     @wraps(handler_func)
     def wrapper(*args, **kwargs):
-        # Find the event in arguments - should be first or second argument
+        # Find the event in arguments - look through all arguments to find the Lambda event
         event = None
-        if len(args) >= 1 and isinstance(args[0], dict) and ('httpMethod' in args[0] or 'auth_claims' in args[0]):
-            event = args[0]
-        elif len(args) >= 2 and isinstance(args[1], dict) and ('httpMethod' in args[1] or 'auth_claims' in args[1]):
-            event = args[1]
+        for arg in args:
+            if isinstance(arg, dict) and ('httpMethod' in arg or 'requestContext' in arg or 'headers' in arg or 'auth_claims' in arg):
+                event = arg
+                break
         
         if event and isinstance(event, dict):
             # Only add auth_claims if they don't already exist
@@ -39,12 +39,12 @@ def mock_optional_auth(handler_func):
 
     @wraps(handler_func)
     def wrapper(*args, **kwargs):
-        # Find the event in arguments - should be first or second argument
+        # Find the event in arguments - look through all arguments to find the Lambda event
         event = None
-        if len(args) >= 1 and isinstance(args[0], dict) and ('httpMethod' in args[0] or 'auth_claims' in args[0]):
-            event = args[0]
-        elif len(args) >= 2 and isinstance(args[1], dict) and ('httpMethod' in args[1] or 'auth_claims' in args[1]):
-            event = args[1]
+        for arg in args:
+            if isinstance(arg, dict) and ('httpMethod' in arg or 'requestContext' in arg or 'headers' in arg or 'auth_claims' in arg):
+                event = arg
+                break
         
         if event and isinstance(event, dict) and "auth_claims" not in event:
             event["auth_claims"] = {

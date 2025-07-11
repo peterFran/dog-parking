@@ -126,15 +126,15 @@ def require_auth(handler_func):
 
     @wraps(handler_func)
     def wrapper(*args, **kwargs):
-        # Extract event from arguments - should be first or second argument
+        # Extract event from arguments - look through all arguments to find the Lambda event
         event = None
-        if len(args) >= 1 and isinstance(args[0], dict) and 'httpMethod' in args[0]:
-            event = args[0]
-        elif len(args) >= 2 and isinstance(args[1], dict) and 'httpMethod' in args[1]:
-            event = args[1]
+        for arg in args:
+            if isinstance(arg, dict) and ('httpMethod' in arg or 'requestContext' in arg or 'headers' in arg):
+                event = arg
+                break
         
         if not event:
-            logger.error("Could not find event in function arguments")
+            logger.error(f"Could not find event in function arguments. Args: {len(args)}, Types: {[type(arg).__name__ for arg in args]}")
             return create_response(500, {"error": "Authentication service error"})
         
         try:
@@ -180,12 +180,12 @@ def optional_auth(handler_func):
 
     @wraps(handler_func)
     def wrapper(*args, **kwargs):
-        # Extract event from arguments - should be first or second argument
+        # Extract event from arguments - look through all arguments to find the Lambda event
         event = None
-        if len(args) >= 1 and isinstance(args[0], dict) and 'httpMethod' in args[0]:
-            event = args[0]
-        elif len(args) >= 2 and isinstance(args[1], dict) and 'httpMethod' in args[1]:
-            event = args[1]
+        for arg in args:
+            if isinstance(arg, dict) and ('httpMethod' in arg or 'requestContext' in arg or 'headers' in arg):
+                event = arg
+                break
         
         try:
             if event:
