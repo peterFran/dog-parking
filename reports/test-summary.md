@@ -1,4 +1,4 @@
-# Test Summary - Tue  8 Jul 2025 20:23:14 BST
+# Test Summary - Fri 11 Jul 2025 08:07:25 BST
 
 ## Environment
 - Python: Python 3.13.5
@@ -8,14 +8,14 @@
 ## Test Results
 - Unit Tests: ❌ Failed
 - Integration Tests: ✅ Passed
-- Coverage Threshold: 80%
+- Coverage Threshold: 76%
 
 ## Code Quality
-- Black Formatting: ✅ Passed
+- Black Formatting: ⚠️ Issues found
 - Flake8 Linting: ⚠️ Issues found
 - MyPy Type Checking: ⚠️ Issues found
 
 ## Infrastructure
-- SAM Template: ❌ Invalid
+- SAM Template: ✅ Valid
 
-Generated on: Tue  8 Jul 2025 20:23:15 BST
+Generated on: Fri 11 Jul 2025 08:07:27 BST
