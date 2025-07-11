@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError
 import logging
 import sys
 sys.path.append('/opt/python')
-from auth.app import require_auth, optional_auth, get_user_id_from_event
+from auth import require_auth, optional_auth, get_user_id_from_event
 
 # Configure logging
 logger = logging.getLogger()

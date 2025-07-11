@@ -9,7 +9,7 @@ import logging
 import re
 import sys
 sys.path.append('/opt/python')
-from auth.app import require_auth, optional_auth, get_user_id_from_event, is_user_verified
+from auth import require_auth, optional_auth, get_user_id_from_event, is_user_verified
 
 # Configure logging
 logger = logging.getLogger()
