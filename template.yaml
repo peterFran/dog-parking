@@ -46,6 +46,8 @@ Resources:
       CompatibleRuntimes:
         - python3.11
       RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: python3.11
 
   # API Gateway
   DogCareApi:
