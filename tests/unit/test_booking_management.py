@@ -14,6 +14,7 @@ sys.path.insert(0, test_dir)
 
 # Set up auth mocks BEFORE importing anything else
 from auth_mock import setup_auth_mocks
+
 setup_auth_mocks()
 
 # Add the functions directory to the path
@@ -34,7 +35,7 @@ def test_create_booking():
     """Test creating a new booking"""
     # Setup mock DynamoDB
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-    
+
     # Create dogs table
     dynamodb.create_table(
         TableName="dogs-test",
@@ -52,7 +53,7 @@ def test_create_booking():
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     # Create owners table
     dynamodb.create_table(
         TableName="owners-test",
@@ -60,7 +61,7 @@ def test_create_booking():
         AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     # Create venues table
     dynamodb.create_table(
         TableName="venues-test",
@@ -68,7 +69,7 @@ def test_create_booking():
         AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     # Create bookings table
     dynamodb.create_table(
         TableName="bookings-test",
@@ -86,7 +87,7 @@ def test_create_booking():
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     # Create test data
     dogs_table = dynamodb.Table("dogs-test")
     dogs_table.put_item(
@@ -94,17 +95,21 @@ def test_create_booking():
     )
 
     owners_table = dynamodb.Table("owners-test")
-    owners_table.put_item(Item={"user_id": "test-user-123", "preferences": {"notifications": True}})
+    owners_table.put_item(
+        Item={"user_id": "test-user-123", "preferences": {"notifications": True}}
+    )
 
     venues_table = dynamodb.Table("venues-test")
-    venues_table.put_item(Item={
-        "id": "venue-123", 
-        "name": "Test Venue", 
-        "capacity": 20,
-        "operating_hours": {
-            "monday": {"open": True, "start": "08:00", "end": "18:00"}
+    venues_table.put_item(
+        Item={
+            "id": "venue-123",
+            "name": "Test Venue",
+            "capacity": 20,
+            "operating_hours": {
+                "monday": {"open": True, "start": "08:00", "end": "18:00"}
+            },
         }
-    })
+    )
 
     # Test event (no owner_id needed - comes from auth)
     event = {
@@ -122,12 +127,15 @@ def test_create_booking():
         ),
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test",
-        "VENUES_TABLE": "venues-test",
-        "BOOKINGS_TABLE": "bookings-test"
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+            "BOOKINGS_TABLE": "bookings-test",
+        },
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 201
@@ -144,7 +152,7 @@ def test_create_booking_invalid_dog_owner():
     """Test creating booking with dog that doesn't belong to owner"""
     # Setup mock DynamoDB
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-    
+
     # Create all tables
     dynamodb.create_table(
         TableName="dogs-test",
@@ -162,21 +170,21 @@ def test_create_booking_invalid_dog_owner():
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     dynamodb.create_table(
         TableName="owners-test",
         KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     dynamodb.create_table(
         TableName="venues-test",
         KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     dynamodb.create_table(
         TableName="bookings-test",
         KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
@@ -193,7 +201,7 @@ def test_create_booking_invalid_dog_owner():
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     # Create test data - dog belongs to different owner
     dogs_table = dynamodb.Table("dogs-test")
     dogs_table.put_item(
@@ -201,17 +209,21 @@ def test_create_booking_invalid_dog_owner():
     )
 
     owners_table = dynamodb.Table("owners-test")
-    owners_table.put_item(Item={"user_id": "test-user-123", "preferences": {"notifications": True}})
+    owners_table.put_item(
+        Item={"user_id": "test-user-123", "preferences": {"notifications": True}}
+    )
 
     venues_table = dynamodb.Table("venues-test")
-    venues_table.put_item(Item={
-        "id": "venue-123", 
-        "name": "Test Venue", 
-        "capacity": 20,
-        "operating_hours": {
-            "monday": {"open": True, "start": "08:00", "end": "18:00"}
+    venues_table.put_item(
+        Item={
+            "id": "venue-123",
+            "name": "Test Venue",
+            "capacity": 20,
+            "operating_hours": {
+                "monday": {"open": True, "start": "08:00", "end": "18:00"}
+            },
         }
-    })
+    )
 
     # Test event
     event = {
@@ -228,12 +240,15 @@ def test_create_booking_invalid_dog_owner():
         ),
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test",
-        "VENUES_TABLE": "venues-test",
-        "BOOKINGS_TABLE": "bookings-test"
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+            "BOOKINGS_TABLE": "bookings-test",
+        },
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 403
@@ -246,7 +261,7 @@ def test_get_booking():
     """Test getting a specific booking"""
     # Setup mock DynamoDB
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-    
+
     # Create bookings table
     dynamodb.create_table(
         TableName="bookings-test",
@@ -264,7 +279,7 @@ def test_get_booking():
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     # Create test booking
     bookings_table = dynamodb.Table("bookings-test")
     bookings_table.put_item(
@@ -285,12 +300,15 @@ def test_get_booking():
         "pathParameters": {"id": "booking-123"},
     }
 
-    with patch.dict(os.environ, {
-        "BOOKINGS_TABLE": "bookings-test",
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test",
-        "VENUES_TABLE": "venues-test"
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "BOOKINGS_TABLE": "bookings-test",
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+        },
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 200
@@ -304,7 +322,7 @@ def test_list_bookings():
     """Test listing bookings for authenticated user"""
     # Setup mock DynamoDB
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-    
+
     # Create bookings table
     dynamodb.create_table(
         TableName="bookings-test",
@@ -322,7 +340,7 @@ def test_list_bookings():
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     # Create test bookings
     bookings_table = dynamodb.Table("bookings-test")
     bookings_table.put_item(
@@ -343,12 +361,15 @@ def test_list_bookings():
         "path": "/bookings",
     }
 
-    with patch.dict(os.environ, {
-        "BOOKINGS_TABLE": "bookings-test",
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test",
-        "VENUES_TABLE": "venues-test"
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "BOOKINGS_TABLE": "bookings-test",
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+        },
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 200
@@ -364,7 +385,7 @@ def test_update_booking():
     """Test updating a booking"""
     # Setup mock DynamoDB
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-    
+
     # Create bookings table
     dynamodb.create_table(
         TableName="bookings-test",
@@ -382,7 +403,7 @@ def test_update_booking():
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     # Create test booking
     bookings_table = dynamodb.Table("bookings-test")
     bookings_table.put_item(
@@ -404,12 +425,15 @@ def test_update_booking():
         "body": json.dumps({"status": "confirmed"}),
     }
 
-    with patch.dict(os.environ, {
-        "BOOKINGS_TABLE": "bookings-test",
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test",
-        "VENUES_TABLE": "venues-test"
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "BOOKINGS_TABLE": "bookings-test",
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+        },
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 200
@@ -422,7 +446,7 @@ def test_cancel_booking():
     """Test cancelling a booking"""
     # Setup mock DynamoDB
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-    
+
     # Create bookings table
     dynamodb.create_table(
         TableName="bookings-test",
@@ -440,7 +464,7 @@ def test_cancel_booking():
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     # Create test booking
     bookings_table = dynamodb.Table("bookings-test")
     bookings_table.put_item(
@@ -461,12 +485,15 @@ def test_cancel_booking():
         "pathParameters": {"id": "booking-123"},
     }
 
-    with patch.dict(os.environ, {
-        "BOOKINGS_TABLE": "bookings-test",
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test",
-        "VENUES_TABLE": "venues-test"
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "BOOKINGS_TABLE": "bookings-test",
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+        },
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 200
@@ -487,12 +514,15 @@ def test_missing_required_fields():
         ),
     }
 
-    with patch.dict(os.environ, {
-        "BOOKINGS_TABLE": "bookings-test",
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test",
-        "VENUES_TABLE": "venues-test"
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "BOOKINGS_TABLE": "bookings-test",
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+        },
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 400
@@ -505,7 +535,7 @@ def test_invalid_service_type():
     """Test booking creation with invalid service type"""
     # Setup mock DynamoDB
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-    
+
     # Create all tables
     dynamodb.create_table(
         TableName="dogs-test",
@@ -523,21 +553,21 @@ def test_invalid_service_type():
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     dynamodb.create_table(
         TableName="owners-test",
         KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     dynamodb.create_table(
         TableName="venues-test",
         KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     dynamodb.create_table(
         TableName="bookings-test",
         KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
@@ -554,7 +584,7 @@ def test_invalid_service_type():
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     # Create test data
     dogs_table = dynamodb.Table("dogs-test")
     dogs_table.put_item(
@@ -562,17 +592,21 @@ def test_invalid_service_type():
     )
 
     owners_table = dynamodb.Table("owners-test")
-    owners_table.put_item(Item={"user_id": "test-user-123", "preferences": {"notifications": True}})
+    owners_table.put_item(
+        Item={"user_id": "test-user-123", "preferences": {"notifications": True}}
+    )
 
     venues_table = dynamodb.Table("venues-test")
-    venues_table.put_item(Item={
-        "id": "venue-123", 
-        "name": "Test Venue", 
-        "capacity": 20,
-        "operating_hours": {
-            "monday": {"open": True, "start": "08:00", "end": "18:00"}
+    venues_table.put_item(
+        Item={
+            "id": "venue-123",
+            "name": "Test Venue",
+            "capacity": 20,
+            "operating_hours": {
+                "monday": {"open": True, "start": "08:00", "end": "18:00"}
+            },
         }
-    })
+    )
 
     event = {
         "httpMethod": "POST",
@@ -588,12 +622,15 @@ def test_invalid_service_type():
         ),
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test",
-        "VENUES_TABLE": "venues-test",
-        "BOOKINGS_TABLE": "bookings-test"
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+            "BOOKINGS_TABLE": "bookings-test",
+        },
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 400
@@ -606,7 +643,7 @@ def test_invalid_datetime():
     """Test booking creation with invalid datetime"""
     # Setup mock DynamoDB (minimal setup for validation test)
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-    
+
     # Create minimal tables
     dynamodb.create_table(
         TableName="dogs-test",
@@ -614,28 +651,28 @@ def test_invalid_datetime():
         AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     dynamodb.create_table(
         TableName="owners-test",
         KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     dynamodb.create_table(
         TableName="venues-test",
         KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     dynamodb.create_table(
         TableName="bookings-test",
         KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     # Add test data so we can reach datetime validation
     dogs_table = dynamodb.Table("dogs-test")
     dogs_table.put_item(
@@ -643,18 +680,22 @@ def test_invalid_datetime():
     )
 
     owners_table = dynamodb.Table("owners-test")
-    owners_table.put_item(Item={"user_id": "test-user-123", "preferences": {"notifications": True}})
+    owners_table.put_item(
+        Item={"user_id": "test-user-123", "preferences": {"notifications": True}}
+    )
 
     venues_table = dynamodb.Table("venues-test")
-    venues_table.put_item(Item={
-        "id": "venue-123", 
-        "name": "Test Venue", 
-        "capacity": 20,
-        "operating_hours": {
-            "monday": {"open": True, "start": "08:00", "end": "18:00"}
+    venues_table.put_item(
+        Item={
+            "id": "venue-123",
+            "name": "Test Venue",
+            "capacity": 20,
+            "operating_hours": {
+                "monday": {"open": True, "start": "08:00", "end": "18:00"}
+            },
         }
-    })
-    
+    )
+
     event = {
         "httpMethod": "POST",
         "path": "/bookings",
@@ -669,12 +710,15 @@ def test_invalid_datetime():
         ),
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test",
-        "VENUES_TABLE": "venues-test",
-        "BOOKINGS_TABLE": "bookings-test"
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+            "BOOKINGS_TABLE": "bookings-test",
+        },
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 400
@@ -687,7 +731,7 @@ def test_end_time_before_start_time():
     """Test booking creation with end time before start time"""
     # Setup mock DynamoDB (minimal setup for validation test)
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-    
+
     # Create minimal tables
     dynamodb.create_table(
         TableName="dogs-test",
@@ -695,28 +739,28 @@ def test_end_time_before_start_time():
         AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     dynamodb.create_table(
         TableName="owners-test",
         KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     dynamodb.create_table(
         TableName="venues-test",
         KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     dynamodb.create_table(
         TableName="bookings-test",
         KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-    
+
     # Add test data so we can reach datetime validation
     dogs_table = dynamodb.Table("dogs-test")
     dogs_table.put_item(
@@ -724,18 +768,22 @@ def test_end_time_before_start_time():
     )
 
     owners_table = dynamodb.Table("owners-test")
-    owners_table.put_item(Item={"user_id": "test-user-123", "preferences": {"notifications": True}})
+    owners_table.put_item(
+        Item={"user_id": "test-user-123", "preferences": {"notifications": True}}
+    )
 
     venues_table = dynamodb.Table("venues-test")
-    venues_table.put_item(Item={
-        "id": "venue-123", 
-        "name": "Test Venue", 
-        "capacity": 20,
-        "operating_hours": {
-            "monday": {"open": True, "start": "08:00", "end": "18:00"}
+    venues_table.put_item(
+        Item={
+            "id": "venue-123",
+            "name": "Test Venue",
+            "capacity": 20,
+            "operating_hours": {
+                "monday": {"open": True, "start": "08:00", "end": "18:00"}
+            },
         }
-    })
-    
+    )
+
     event = {
         "httpMethod": "POST",
         "path": "/bookings",
@@ -750,12 +798,15 @@ def test_end_time_before_start_time():
         ),
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test",
-        "VENUES_TABLE": "venues-test",
-        "BOOKINGS_TABLE": "bookings-test"
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+            "BOOKINGS_TABLE": "bookings-test",
+        },
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 400
@@ -791,15 +842,18 @@ def test_method_not_allowed():
     event = {
         "httpMethod": "PATCH",
         "path": "/bookings",
-        "body": json.dumps({"dog_id": "dog-123"})
+        "body": json.dumps({"dog_id": "dog-123"}),
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test",
-        "VENUES_TABLE": "venues-test",
-        "BOOKINGS_TABLE": "bookings-test"
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+            "BOOKINGS_TABLE": "bookings-test",
+        },
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 405

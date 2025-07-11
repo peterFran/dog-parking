@@ -362,9 +362,9 @@ class TestVenueManagement:
             "httpMethod": "GET",
             "path": "/venues",
         }
-        
+
         response = lambda_handler(event, None)
-        
+
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
         assert "Internal server error" in body["error"]
@@ -376,11 +376,11 @@ class TestVenueManagement:
                 event = {
                     "httpMethod": "POST",
                     "path": "/venues",
-                    "body": "invalid-json"
+                    "body": "invalid-json",
                 }
-                
+
                 response = lambda_handler(event, None)
-                
+
                 assert response["statusCode"] == 400
                 body = json.loads(response["body"])
                 assert "Invalid JSON" in body["error"]
@@ -393,9 +393,9 @@ class TestVenueManagement:
                     "httpMethod": "GET",
                     "path": "/unknown",
                 }
-                
+
                 response = lambda_handler(event, None)
-                
+
                 assert response["statusCode"] == 404
                 body = json.loads(response["body"])
                 assert "Endpoint not found" in body["error"]
@@ -403,26 +403,28 @@ class TestVenueManagement:
     def test_create_venue_client_error(self, mock_table):
         """Test venue creation with database error"""
         from botocore.exceptions import ClientError
-        
+
         mock_table.put_item.side_effect = ClientError(
             error_response={"Error": {"Code": "ValidationException"}},
-            operation_name="PutItem"
+            operation_name="PutItem",
         )
-        
+
         event = {
-            "body": json.dumps({
-                "name": "Test Venue",
-                "address": {"street": "123 Test St"},
-                "capacity": 20,
-                "operating_hours": {
-                    "monday": {"open": True, "start": "08:00", "end": "18:00"}
+            "body": json.dumps(
+                {
+                    "name": "Test Venue",
+                    "address": {"street": "123 Test St"},
+                    "capacity": 20,
+                    "operating_hours": {
+                        "monday": {"open": True, "start": "08:00", "end": "18:00"}
+                    },
                 }
-            }),
-            "httpMethod": "POST"
+            ),
+            "httpMethod": "POST",
         }
-        
+
         response = create_venue(mock_table, event)
-        
+
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
         assert "Failed to create venue" in body["error"]
@@ -430,14 +432,14 @@ class TestVenueManagement:
     def test_get_venue_client_error(self, mock_table):
         """Test venue retrieval with database error"""
         from botocore.exceptions import ClientError
-        
+
         mock_table.get_item.side_effect = ClientError(
             error_response={"Error": {"Code": "ResourceNotFoundException"}},
-            operation_name="GetItem"
+            operation_name="GetItem",
         )
-        
+
         response = get_venue(mock_table, "venue-123")
-        
+
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
         assert "Failed to get venue" in body["error"]
@@ -445,15 +447,15 @@ class TestVenueManagement:
     def test_list_venues_client_error(self, mock_table):
         """Test venue listing with database error"""
         from botocore.exceptions import ClientError
-        
+
         mock_table.scan.side_effect = ClientError(
             error_response={"Error": {"Code": "InternalServerError"}},
-            operation_name="Scan"
+            operation_name="Scan",
         )
-        
+
         event = {"queryStringParameters": None}
         response = list_venues(mock_table, event)
-        
+
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
         assert "Failed to list venues" in body["error"]
@@ -461,20 +463,17 @@ class TestVenueManagement:
     def test_update_venue_client_error(self, mock_table):
         """Test venue update with database error"""
         from botocore.exceptions import ClientError
-        
+
         mock_table.get_item.return_value = {"Item": {"id": "venue-123"}}
         mock_table.update_item.side_effect = ClientError(
             error_response={"Error": {"Code": "ValidationException"}},
-            operation_name="UpdateItem"
+            operation_name="UpdateItem",
         )
-        
-        event = {
-            "body": json.dumps({"name": "New Name"}),
-            "httpMethod": "PUT"
-        }
-        
+
+        event = {"body": json.dumps({"name": "New Name"}), "httpMethod": "PUT"}
+
         response = update_venue(mock_table, "venue-123", event)
-        
+
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
         assert "Failed to update venue" in body["error"]
@@ -482,15 +481,15 @@ class TestVenueManagement:
     def test_delete_venue_client_error(self, mock_table):
         """Test venue deletion with database error"""
         from botocore.exceptions import ClientError
-        
+
         mock_table.get_item.return_value = {"Item": {"id": "venue-123"}}
         mock_table.delete_item.side_effect = ClientError(
             error_response={"Error": {"Code": "ConditionalCheckFailedException"}},
-            operation_name="DeleteItem"
+            operation_name="DeleteItem",
         )
-        
+
         response = delete_venue(mock_table, "venue-123")
-        
+
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
         assert "Failed to delete venue" in body["error"]
@@ -498,16 +497,16 @@ class TestVenueManagement:
     def test_get_venue_slots_client_error(self, mock_table):
         """Test venue slots retrieval with database error"""
         from botocore.exceptions import ClientError
-        
+
         mock_table.get_item.side_effect = ClientError(
             error_response={"Error": {"Code": "ResourceNotFoundException"}},
-            operation_name="GetItem"
+            operation_name="GetItem",
         )
-        
+
         event = {"queryStringParameters": {"date": "2024-01-01"}}
-        
+
         response = get_venue_slots(mock_table, "venue-123", event)
-        
+
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
         assert "Failed to get venue slots" in body["error"]
@@ -515,23 +514,21 @@ class TestVenueManagement:
     def test_update_venue_slots_client_error(self, mock_table):
         """Test venue slots update with database error"""
         from botocore.exceptions import ClientError
-        
+
         mock_table.get_item.return_value = {"Item": {"id": "venue-123"}}
         mock_table.update_item.side_effect = ClientError(
             error_response={"Error": {"Code": "ValidationException"}},
-            operation_name="UpdateItem"
+            operation_name="UpdateItem",
         )
-        
+
         event = {
-            "body": json.dumps({
-                "date": "2024-01-01",
-                "slot_time": "09:00",
-                "available_capacity": 5
-            })
+            "body": json.dumps(
+                {"date": "2024-01-01", "slot_time": "09:00", "available_capacity": 5}
+            )
         }
-        
+
         response = update_venue_slots(mock_table, "venue-123", event)
-        
+
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
         assert "Failed to update venue slots" in body["error"]

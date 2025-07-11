@@ -11,6 +11,7 @@ sys.path.insert(0, test_dir)
 
 # Set up auth mocks BEFORE importing anything else
 from auth_mock import setup_auth_mocks
+
 setup_auth_mocks()
 
 # Add the functions directory to the path
@@ -61,10 +62,9 @@ def test_create_dog():
 
     # Create a test owner profile
     owners_table = dynamodb.Table("owners-test")
-    owners_table.put_item(Item={
-        "user_id": "test-user-123", 
-        "preferences": {"notifications": True}
-    })
+    owners_table.put_item(
+        Item={"user_id": "test-user-123", "preferences": {"notifications": True}}
+    )
 
     # Test event (no owner_id needed - comes from auth)
     event = {
@@ -83,10 +83,9 @@ def test_create_dog():
         ),
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test", 
-        "OWNERS_TABLE": "owners-test"
-    }):
+    with patch.dict(
+        os.environ, {"DOGS_TABLE": "dogs-test", "OWNERS_TABLE": "owners-test"}
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 201
@@ -133,13 +132,14 @@ def test_create_dog_no_profile():
     event = {
         "httpMethod": "POST",
         "path": "/dogs",
-        "body": json.dumps({"name": "Buddy", "breed": "Labrador", "age": 2, "size": "medium"}),
+        "body": json.dumps(
+            {"name": "Buddy", "breed": "Labrador", "age": 2, "size": "medium"}
+        ),
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test", 
-        "OWNERS_TABLE": "owners-test"
-    }):
+    with patch.dict(
+        os.environ, {"DOGS_TABLE": "dogs-test", "OWNERS_TABLE": "owners-test"}
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 400
@@ -181,28 +181,31 @@ def test_list_dogs():
 
     # Add test dogs
     dogs_table = dynamodb.Table("dogs-test")
-    dogs_table.put_item(Item={
-        "id": "dog-1",
-        "name": "Buddy",
-        "owner_id": "test-user-123",
-        "breed": "Labrador"
-    })
-    dogs_table.put_item(Item={
-        "id": "dog-2",
-        "name": "Max",
-        "owner_id": "test-user-123",
-        "breed": "German Shepherd"
-    })
+    dogs_table.put_item(
+        Item={
+            "id": "dog-1",
+            "name": "Buddy",
+            "owner_id": "test-user-123",
+            "breed": "Labrador",
+        }
+    )
+    dogs_table.put_item(
+        Item={
+            "id": "dog-2",
+            "name": "Max",
+            "owner_id": "test-user-123",
+            "breed": "German Shepherd",
+        }
+    )
 
     event = {
         "httpMethod": "GET",
         "path": "/dogs",
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test"
-    }):
+    with patch.dict(
+        os.environ, {"DOGS_TABLE": "dogs-test", "OWNERS_TABLE": "owners-test"}
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 200
@@ -245,23 +248,24 @@ def test_get_dog():
 
     # Add test dog
     dogs_table = dynamodb.Table("dogs-test")
-    dogs_table.put_item(Item={
-        "id": "dog-123",
-        "name": "Buddy",
-        "owner_id": "test-user-123",
-        "breed": "Labrador"
-    })
+    dogs_table.put_item(
+        Item={
+            "id": "dog-123",
+            "name": "Buddy",
+            "owner_id": "test-user-123",
+            "breed": "Labrador",
+        }
+    )
 
     event = {
         "httpMethod": "GET",
         "path": "/dogs/dog-123",
-        "pathParameters": {"id": "dog-123"}
+        "pathParameters": {"id": "dog-123"},
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test"
-    }):
+    with patch.dict(
+        os.environ, {"DOGS_TABLE": "dogs-test", "OWNERS_TABLE": "owners-test"}
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 200
@@ -304,23 +308,24 @@ def test_get_dog_access_denied():
 
     # Add dog belonging to different user
     dogs_table = dynamodb.Table("dogs-test")
-    dogs_table.put_item(Item={
-        "id": "dog-123",
-        "name": "Buddy",
-        "owner_id": "different-user",
-        "breed": "Labrador"
-    })
+    dogs_table.put_item(
+        Item={
+            "id": "dog-123",
+            "name": "Buddy",
+            "owner_id": "different-user",
+            "breed": "Labrador",
+        }
+    )
 
     event = {
         "httpMethod": "GET",
         "path": "/dogs/dog-123",
-        "pathParameters": {"id": "dog-123"}
+        "pathParameters": {"id": "dog-123"},
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test"
-    }):
+    with patch.dict(
+        os.environ, {"DOGS_TABLE": "dogs-test", "OWNERS_TABLE": "owners-test"}
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 403
@@ -362,25 +367,26 @@ def test_update_dog():
 
     # Add test dog
     dogs_table = dynamodb.Table("dogs-test")
-    dogs_table.put_item(Item={
-        "id": "dog-123",
-        "name": "Buddy",
-        "owner_id": "test-user-123",
-        "breed": "Labrador",
-        "age": 2
-    })
+    dogs_table.put_item(
+        Item={
+            "id": "dog-123",
+            "name": "Buddy",
+            "owner_id": "test-user-123",
+            "breed": "Labrador",
+            "age": 2,
+        }
+    )
 
     event = {
         "httpMethod": "PUT",
         "path": "/dogs/dog-123",
         "pathParameters": {"id": "dog-123"},
-        "body": json.dumps({"age": 3, "vaccination_status": "up-to-date"})
+        "body": json.dumps({"age": 3, "vaccination_status": "up-to-date"}),
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test"
-    }):
+    with patch.dict(
+        os.environ, {"DOGS_TABLE": "dogs-test", "OWNERS_TABLE": "owners-test"}
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 200
@@ -415,23 +421,24 @@ def test_delete_dog():
 
     # Add test dog
     dogs_table = dynamodb.Table("dogs-test")
-    dogs_table.put_item(Item={
-        "id": "dog-123",
-        "name": "Buddy",
-        "owner_id": "test-user-123",
-        "breed": "Labrador"
-    })
+    dogs_table.put_item(
+        Item={
+            "id": "dog-123",
+            "name": "Buddy",
+            "owner_id": "test-user-123",
+            "breed": "Labrador",
+        }
+    )
 
     event = {
         "httpMethod": "DELETE",
         "path": "/dogs/dog-123",
-        "pathParameters": {"id": "dog-123"}
+        "pathParameters": {"id": "dog-123"},
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test"
-    }):
+    with patch.dict(
+        os.environ, {"DOGS_TABLE": "dogs-test", "OWNERS_TABLE": "owners-test"}
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 204
@@ -470,26 +477,26 @@ def test_invalid_size():
 
     # Create owner profile
     owners_table = dynamodb.Table("owners-test")
-    owners_table.put_item(Item={
-        "user_id": "test-user-123", 
-        "preferences": {"notifications": True}
-    })
+    owners_table.put_item(
+        Item={"user_id": "test-user-123", "preferences": {"notifications": True}}
+    )
 
     event = {
         "httpMethod": "POST",
         "path": "/dogs",
-        "body": json.dumps({
-            "name": "Buddy",
-            "breed": "Labrador", 
-            "age": 2, 
-            "size": "extra-large"  # Invalid size
-        }),
+        "body": json.dumps(
+            {
+                "name": "Buddy",
+                "breed": "Labrador",
+                "age": 2,
+                "size": "extra-large",  # Invalid size
+            }
+        ),
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test", 
-        "OWNERS_TABLE": "owners-test"
-    }):
+    with patch.dict(
+        os.environ, {"DOGS_TABLE": "dogs-test", "OWNERS_TABLE": "owners-test"}
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 400
@@ -499,16 +506,11 @@ def test_invalid_size():
 
 def test_invalid_json():
     """Test with invalid JSON"""
-    event = {
-        "httpMethod": "POST",
-        "path": "/dogs",
-        "body": "invalid json"
-    }
+    event = {"httpMethod": "POST", "path": "/dogs", "body": "invalid json"}
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test"
-    }):
+    with patch.dict(
+        os.environ, {"DOGS_TABLE": "dogs-test", "OWNERS_TABLE": "owners-test"}
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 400
@@ -521,13 +523,12 @@ def test_method_not_allowed():
     event = {
         "httpMethod": "PATCH",
         "path": "/dogs",
-        "body": json.dumps({"name": "Test"})
+        "body": json.dumps({"name": "Test"}),
     }
 
-    with patch.dict(os.environ, {
-        "DOGS_TABLE": "dogs-test",
-        "OWNERS_TABLE": "owners-test"
-    }):
+    with patch.dict(
+        os.environ, {"DOGS_TABLE": "dogs-test", "OWNERS_TABLE": "owners-test"}
+    ):
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 405

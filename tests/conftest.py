@@ -110,11 +110,13 @@ def dynamodb_setup(aws_credentials):
                 "AttributeDefinitions": table_config["AttributeDefinitions"],
                 "BillingMode": "PAY_PER_REQUEST",
             }
-            
+
             # Only add GlobalSecondaryIndexes if they exist
             if table_config.get("GlobalSecondaryIndexes"):
-                create_table_kwargs["GlobalSecondaryIndexes"] = table_config["GlobalSecondaryIndexes"]
-            
+                create_table_kwargs["GlobalSecondaryIndexes"] = table_config[
+                    "GlobalSecondaryIndexes"
+                ]
+
             dynamodb.create_table(**create_table_kwargs)
 
         yield dynamodb

@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 import logging
 import sys
-sys.path.append('/opt/python')
+
+sys.path.append("/opt/python")
 from auth import require_auth, optional_auth, get_user_id_from_event
 
 # Configure logging
@@ -71,17 +72,17 @@ def get_dog(table, dog_id, event):
     try:
         # Get user_id from authenticated claims
         user_id = get_user_id_from_event(event)
-        
+
         if not user_id:
             return create_response(401, {"error": "Authentication required"})
-        
+
         response = table.get_item(Key={"id": dog_id})
 
         if "Item" not in response:
             return create_response(404, {"error": "Dog not found"})
-        
+
         dog = response["Item"]
-        
+
         # Verify ownership
         if dog.get("owner_id") != user_id:
             return create_response(403, {"error": "Access denied - not your dog"})
@@ -99,7 +100,7 @@ def list_dogs(table, event):
     try:
         # Get user_id from authenticated claims
         user_id = get_user_id_from_event(event)
-        
+
         if not user_id:
             return create_response(401, {"error": "Authentication required"})
 
@@ -125,10 +126,10 @@ def create_dog(dogs_table, owners_table, event):
     try:
         # Get user_id from authenticated claims
         user_id = get_user_id_from_event(event)
-        
+
         if not user_id:
             return create_response(401, {"error": "Authentication required"})
-        
+
         # Parse request body
         body = json.loads(event.get("body", "{}"))
 
@@ -143,7 +144,9 @@ def create_dog(dogs_table, owners_table, event):
         # Verify user profile exists
         owner_response = owners_table.get_item(Key={"user_id": user_id})
         if "Item" not in owner_response:
-            return create_response(400, {"error": "Please complete profile registration first"})
+            return create_response(
+                400, {"error": "Please complete profile registration first"}
+            )
 
         # Validate age
         if not isinstance(body["age"], int) or body["age"] < 0:
@@ -194,10 +197,10 @@ def update_dog(table, dog_id, event):
     try:
         # Get user_id from authenticated claims
         user_id = get_user_id_from_event(event)
-        
+
         if not user_id:
             return create_response(401, {"error": "Authentication required"})
-        
+
         # Parse request body
         body = json.loads(event.get("body", "{}"))
 
@@ -205,7 +208,7 @@ def update_dog(table, dog_id, event):
         existing_dog = table.get_item(Key={"id": dog_id})
         if "Item" not in existing_dog:
             return create_response(404, {"error": "Dog not found"})
-        
+
         dog = existing_dog["Item"]
         if dog.get("owner_id") != user_id:
             return create_response(403, {"error": "Access denied - not your dog"})
@@ -269,15 +272,15 @@ def delete_dog(table, dog_id, event):
     try:
         # Get user_id from authenticated claims
         user_id = get_user_id_from_event(event)
-        
+
         if not user_id:
             return create_response(401, {"error": "Authentication required"})
-        
+
         # Check if dog exists and verify ownership
         existing_dog = table.get_item(Key={"id": dog_id})
         if "Item" not in existing_dog:
             return create_response(404, {"error": "Dog not found"})
-        
+
         dog = existing_dog["Item"]
         if dog.get("owner_id") != user_id:
             return create_response(403, {"error": "Access denied - not your dog"})

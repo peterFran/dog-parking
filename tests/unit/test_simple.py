@@ -11,6 +11,7 @@ sys.path.insert(0, test_dir)
 
 # Set up auth mocks BEFORE importing anything else
 from auth_mock import setup_auth_mocks
+
 setup_auth_mocks()
 
 # Add the functions directory to the path
@@ -60,7 +61,9 @@ def test_create_dog_simple():
 
     # Create a test owner profile
     owners_table = dynamodb.Table("owners-test")
-    owners_table.put_item(Item={"user_id": "test-user-123", "preferences": {"notifications": True}})
+    owners_table.put_item(
+        Item={"user_id": "test-user-123", "preferences": {"notifications": True}}
+    )
 
     # Test event (no owner_id needed - comes from auth)
     event = {

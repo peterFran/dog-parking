@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 import logging
 import sys
-sys.path.append('/opt/python')
+
+sys.path.append("/opt/python")
 from auth import require_auth, optional_auth, get_user_id_from_event
 
 # Configure logging
@@ -56,7 +57,9 @@ def lambda_handler(event, context):
             else:
                 return list_bookings(bookings_table, event)
         elif http_method == "POST":
-            return create_booking_with_auth(bookings_table, dogs_table, owners_table, venues_table, event)
+            return create_booking_with_auth(
+                bookings_table, dogs_table, owners_table, venues_table, event
+            )
         elif http_method == "PUT":
             return update_booking(bookings_table, path_parameters["id"], event)
         elif http_method == "DELETE":
@@ -110,12 +113,14 @@ def list_bookings(table, event):
 
 
 @require_auth
-def create_booking_with_auth(bookings_table, dogs_table, owners_table, venues_table, event):
+def create_booking_with_auth(
+    bookings_table, dogs_table, owners_table, venues_table, event
+):
     """Create a new booking with authentication"""
     try:
         # Get user ID from auth claims
         user_id = get_user_id_from_event(event)
-        
+
         # Parse request body
         body = json.loads(event.get("body", "{}"))
 
@@ -151,7 +156,7 @@ def create_booking_with_auth(bookings_table, dogs_table, owners_table, venues_ta
         venue_response = venues_table.get_item(Key={"id": body["venue_id"]})
         if "Item" not in venue_response:
             return create_response(404, {"error": "Venue not found"})
-        
+
         venue = venue_response["Item"]
 
         # Validate service type
@@ -303,55 +308,70 @@ def cancel_booking(table, booking_id):
 def check_venue_availability(venue, start_time, end_time):
     """Check if venue has availability for the requested time slot"""
     from datetime import timedelta
-    
+
     # Get date and time from start_time
     date_str = start_time.strftime("%Y-%m-%d")
     day_of_week = start_time.strftime("%A").lower()
-    
+
     # Check if venue is open on this day
     operating_hours = venue.get("operating_hours", {})
     if day_of_week not in operating_hours:
         return {"available": False, "message": "Venue is not open on this day"}
-    
+
     day_hours = operating_hours[day_of_week]
     if not day_hours.get("open", True):
         return {"available": False, "message": "Venue is closed on this day"}
-    
+
     # Parse venue operating hours
     try:
         venue_start = datetime.strptime(day_hours["start"], "%H:%M").time()
         venue_end = datetime.strptime(day_hours["end"], "%H:%M").time()
-        
+
         # Check if booking time is within operating hours
         booking_start_time = start_time.time()
         booking_end_time = end_time.time()
-        
+
         if booking_start_time < venue_start or booking_end_time > venue_end:
-            return {"available": False, "message": f"Booking time outside operating hours ({day_hours['start']} - {day_hours['end']})"}
-        
+            return {
+                "available": False,
+                "message": f"Booking time outside operating hours ({day_hours['start']} - {day_hours['end']})",
+            }
+
         # Check slot availability
         available_slots = venue.get("available_slots", {})
         slot_duration = timedelta(minutes=int(venue.get("slot_duration", 60)))
-        
+
         # Generate time slots for the booking period
         current_time = start_time
         while current_time < end_time:
             slot_time_str = current_time.strftime("%H:%M")
-            
+
             # Check if this slot has availability
             slot_capacity = venue["capacity"]  # Default to venue capacity
-            if date_str in available_slots and slot_time_str in available_slots[date_str]:
+            if (
+                date_str in available_slots
+                and slot_time_str in available_slots[date_str]
+            ):
                 slot_capacity = available_slots[date_str][slot_time_str]
-            
+
             if slot_capacity <= 0:
-                return {"available": False, "message": f"No availability at {slot_time_str} on {date_str}"}
-            
+                return {
+                    "available": False,
+                    "message": f"No availability at {slot_time_str} on {date_str}",
+                }
+
             current_time += slot_duration
-        
-        return {"available": True, "message": "Venue is available for the requested time"}
-        
+
+        return {
+            "available": True,
+            "message": "Venue is available for the requested time",
+        }
+
     except ValueError as e:
-        return {"available": False, "message": f"Invalid venue operating hours: {str(e)}"}
+        return {
+            "available": False,
+            "message": f"Invalid venue operating hours: {str(e)}",
+        }
 
 
 def calculate_price(service_type, start_time, end_time):

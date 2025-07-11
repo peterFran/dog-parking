@@ -83,7 +83,9 @@ def create_venue(table, event):
 
         # Validate capacity
         if not isinstance(body["capacity"], int) or body["capacity"] < 1:
-            return create_response(400, {"error": "Capacity must be a positive integer"})
+            return create_response(
+                400, {"error": "Capacity must be a positive integer"}
+            )
 
         # Validate operating hours
         if not validate_operating_hours(body["operating_hours"]):
@@ -139,16 +141,13 @@ def list_venues(table, event):
         # Get query parameters
         query_params = event.get("queryStringParameters") or {}
         limit = int(query_params.get("limit", 50))
-        
+
         # Scan table for venues
         response = table.scan(Limit=limit)
-        
+
         venues = response.get("Items", [])
-        
-        return create_response(200, {
-            "venues": venues,
-            "count": len(venues)
-        })
+
+        return create_response(200, {"venues": venues, "count": len(venues)})
 
     except ClientError as e:
         logger.error(f"Error listing venues: {str(e)}")
@@ -171,9 +170,16 @@ def update_venue(table, venue_id, event):
         expression_values = {":updated_at": datetime.now(timezone.utc).isoformat()}
 
         # Update allowed fields
-        allowed_fields = ["name", "address", "capacity", "operating_hours", "services", "slot_duration"]
+        allowed_fields = [
+            "name",
+            "address",
+            "capacity",
+            "operating_hours",
+            "services",
+            "slot_duration",
+        ]
         expression_names = {}
-        
+
         for field in allowed_fields:
             if field in body:
                 if field == "name":
@@ -183,12 +189,16 @@ def update_venue(table, venue_id, event):
                     expression_values[":name"] = body[field]
                 elif field == "capacity":
                     if not isinstance(body[field], int) or body[field] < 1:
-                        return create_response(400, {"error": "Capacity must be a positive integer"})
+                        return create_response(
+                            400, {"error": "Capacity must be a positive integer"}
+                        )
                     update_expression += f", capacity = :capacity"
                     expression_values[":capacity"] = body[field]
                 elif field == "operating_hours":
                     if not validate_operating_hours(body[field]):
-                        return create_response(400, {"error": "Invalid operating hours format"})
+                        return create_response(
+                            400, {"error": "Invalid operating hours format"}
+                        )
                     update_expression += f", operating_hours = :operating_hours"
                     expression_values[":operating_hours"] = body[field]
                 else:
@@ -242,7 +252,7 @@ def get_venue_slots(table, venue_id, event):
         # Get query parameters
         query_params = event.get("queryStringParameters") or {}
         date_str = query_params.get("date")  # Format: YYYY-MM-DD
-        
+
         if not date_str:
             return create_response(400, {"error": "Date parameter is required"})
 
@@ -252,15 +262,13 @@ def get_venue_slots(table, venue_id, event):
             return create_response(404, {"error": "Venue not found"})
 
         venue = venue_response["Item"]
-        
+
         # Generate slots for the requested date
         slots = generate_slots_for_date(venue, date_str)
-        
-        return create_response(200, {
-            "venue_id": venue_id,
-            "date": date_str,
-            "slots": slots
-        })
+
+        return create_response(
+            200, {"venue_id": venue_id, "date": date_str, "slots": slots}
+        )
 
     except ValueError as e:
         return create_response(400, {"error": f"Invalid date format: {str(e)}"})
@@ -274,7 +282,7 @@ def update_venue_slots(table, venue_id, event):
     try:
         # Parse request body
         body = json.loads(event.get("body", "{}"))
-        
+
         # Validate required fields
         required_fields = ["date", "slot_time", "available_capacity"]
         for field in required_fields:
@@ -289,41 +297,44 @@ def update_venue_slots(table, venue_id, event):
             return create_response(404, {"error": "Venue not found"})
 
         venue = venue_response["Item"]
-        
+
         # Update slot availability
         date_str = body["date"]
         slot_time = body["slot_time"]
         available_capacity = body["available_capacity"]
-        
+
         # Initialize available_slots if not exists
         if "available_slots" not in venue:
             venue["available_slots"] = {}
-        
+
         # Initialize date if not exists
         if date_str not in venue["available_slots"]:
             venue["available_slots"][date_str] = {}
-        
+
         # Update the specific slot
         venue["available_slots"][date_str][slot_time] = available_capacity
-        
+
         # Update the venue in database
         table.update_item(
             Key={"id": venue_id},
             UpdateExpression="SET available_slots = :slots, updated_at = :updated_at",
             ExpressionAttributeValues={
                 ":slots": venue["available_slots"],
-                ":updated_at": datetime.now(timezone.utc).isoformat()
-            }
+                ":updated_at": datetime.now(timezone.utc).isoformat(),
+            },
         )
 
         logger.info(f"Updated slots for venue: {venue_id}")
-        return create_response(200, {
-            "message": "Slot availability updated successfully",
-            "venue_id": venue_id,
-            "date": date_str,
-            "slot_time": slot_time,
-            "available_capacity": available_capacity
-        })
+        return create_response(
+            200,
+            {
+                "message": "Slot availability updated successfully",
+                "venue_id": venue_id,
+                "date": date_str,
+                "slot_time": slot_time,
+                "available_capacity": available_capacity,
+            },
+        )
 
     except json.JSONDecodeError:
         return create_response(400, {"error": "Invalid JSON in request body"})
@@ -338,47 +349,51 @@ def generate_slots_for_date(venue, date_str):
         # Parse date
         date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
         day_of_week = date_obj.strftime("%A").lower()
-        
+
         # Get operating hours for the day
         operating_hours = venue["operating_hours"]
         if day_of_week not in operating_hours:
             return []
-        
+
         day_hours = operating_hours[day_of_week]
         if not day_hours.get("open", True):
             return []
-        
+
         # Parse times
         start_time = datetime.strptime(day_hours["start"], "%H:%M").time()
         end_time = datetime.strptime(day_hours["end"], "%H:%M").time()
-        
+
         # Generate slots
         slots = []
         slot_duration = timedelta(minutes=int(venue.get("slot_duration", 60)))
-        
+
         current_time = datetime.combine(date_obj, start_time)
         end_datetime = datetime.combine(date_obj, end_time)
-        
+
         while current_time < end_datetime:
             slot_time_str = current_time.strftime("%H:%M")
-            
+
             # Check if slot is in available_slots, otherwise use venue capacity
             available_capacity = venue["capacity"]
             if "available_slots" in venue:
                 if date_str in venue["available_slots"]:
                     if slot_time_str in venue["available_slots"][date_str]:
-                        available_capacity = venue["available_slots"][date_str][slot_time_str]
-            
-            slots.append({
-                "time": slot_time_str,
-                "available_capacity": available_capacity,
-                "total_capacity": venue["capacity"]
-            })
-            
+                        available_capacity = venue["available_slots"][date_str][
+                            slot_time_str
+                        ]
+
+            slots.append(
+                {
+                    "time": slot_time_str,
+                    "available_capacity": available_capacity,
+                    "total_capacity": venue["capacity"],
+                }
+            )
+
             current_time += slot_duration
-        
+
         return slots
-        
+
     except ValueError as e:
         raise ValueError(f"Invalid date or time format: {str(e)}")
 
@@ -387,30 +402,38 @@ def validate_operating_hours(operating_hours):
     """Validate operating hours format"""
     if not isinstance(operating_hours, dict):
         return False
-    
-    valid_days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-    
+
+    valid_days = [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+    ]
+
     for day, hours in operating_hours.items():
         if day not in valid_days:
             return False
-        
+
         if not isinstance(hours, dict):
             return False
-        
+
         # Check if day is closed
         if not hours.get("open", True):
             continue
-        
+
         # Validate time format
         if "start" not in hours or "end" not in hours:
             return False
-        
+
         try:
             datetime.strptime(hours["start"], "%H:%M")
             datetime.strptime(hours["end"], "%H:%M")
         except ValueError:
             return False
-    
+
     return True
 
 

@@ -11,6 +11,7 @@ sys.path.insert(0, test_dir)
 
 # Set up auth mocks BEFORE importing anything else
 from auth_mock import setup_auth_mocks
+
 setup_auth_mocks()
 
 # Add the functions directory to the path
@@ -52,7 +53,7 @@ def test_register_owner():
                 "preferences": {
                     "notifications": True,
                     "marketing_emails": False,
-                    "preferred_communication": "email"
+                    "preferred_communication": "email",
                 }
             }
         ),
@@ -97,9 +98,7 @@ def test_register_owner_duplicate_profile():
     event = {
         "httpMethod": "POST",
         "path": "/owners/register",
-        "body": json.dumps(
-            {"preferences": {"notifications": False}}
-        ),
+        "body": json.dumps({"preferences": {"notifications": False}}),
     }
 
     with patch.dict(os.environ, {"OWNERS_TABLE": "owners-test"}):
@@ -127,10 +126,7 @@ def test_get_owner_profile():
     # Create test owner profile
     test_owner = {
         "user_id": "test-user-123",
-        "preferences": {
-            "notifications": True,
-            "marketing_emails": False
-        },
+        "preferences": {"notifications": True, "marketing_emails": False},
     }
     owners_table = dynamodb.Table("owners-test")
     owners_table.put_item(Item=test_owner)
@@ -167,10 +163,7 @@ def test_update_owner_profile():
     # Create test owner profile
     test_owner = {
         "user_id": "test-user-123",
-        "preferences": {
-            "notifications": True,
-            "marketing_emails": False
-        },
+        "preferences": {"notifications": True, "marketing_emails": False},
     }
     owners_table = dynamodb.Table("owners-test")
     owners_table.put_item(Item=test_owner)
@@ -179,12 +172,9 @@ def test_update_owner_profile():
     event = {
         "httpMethod": "PUT",
         "path": "/owners/profile",
-        "body": json.dumps({
-            "preferences": {
-                "notifications": False,
-                "marketing_emails": True
-            }
-        }),
+        "body": json.dumps(
+            {"preferences": {"notifications": False, "marketing_emails": True}}
+        ),
     }
 
     with patch.dict(os.environ, {"OWNERS_TABLE": "owners-test"}):
@@ -253,7 +243,6 @@ def test_unsupported_endpoint():
     assert "Endpoint not found" in body["error"]
 
 
-
 def test_exception_handling():
     """Test exception handling"""
     event = {
@@ -269,7 +258,7 @@ def test_exception_handling():
     assert "Internal server error" in body["error"]
 
 
-@mock_aws  
+@mock_aws
 def test_unverified_email():
     """Test registration with unverified email"""
     # Setup mock DynamoDB
@@ -289,8 +278,8 @@ def test_unverified_email():
         "auth_claims": {
             "user_id": "test-user-123",
             "email_verified": False,  # Unverified
-            "provider": "google.com"
-        }
+            "provider": "google.com",
+        },
     }
 
     # Mock is_user_verified to return False (handled by auth_claims)
