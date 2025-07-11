@@ -5,6 +5,14 @@ from unittest.mock import patch
 import sys
 import os
 
+# Add the test directory to the path
+test_dir = os.path.dirname(__file__)
+sys.path.insert(0, test_dir)
+
+# Set up auth mocks BEFORE importing anything else
+from auth_mock import setup_auth_mocks
+setup_auth_mocks()
+
 # Add the functions directory to the path
 owner_management_dir = os.path.join(
     os.path.dirname(__file__), "../../functions/owner_management"
@@ -15,48 +23,37 @@ sys.path.insert(0, owner_management_dir)
 if "app" in sys.modules:
     del sys.modules["app"]
 
+# Now import the app module
 from app import lambda_handler
 
 
 @mock_aws
 def test_register_owner():
-    """Test registering a new owner"""
+    """Test registering a new owner profile (claims-based)"""
     # Setup mock DynamoDB
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
 
-    # Create mock table
+    # Create mock table with new schema
     dynamodb.create_table(
         TableName="owners-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
+        KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
         AttributeDefinitions=[
-            {"AttributeName": "id", "AttributeType": "S"},
-            {"AttributeName": "email", "AttributeType": "S"},
-        ],
-        GlobalSecondaryIndexes=[
-            {
-                "IndexName": "email-index",
-                "KeySchema": [{"AttributeName": "email", "KeyType": "HASH"}],
-                "Projection": {"ProjectionType": "ALL"},
-            }
+            {"AttributeName": "user_id", "AttributeType": "S"},
         ],
         BillingMode="PAY_PER_REQUEST",
     )
 
-    # Test event
+    # Test event with preferences (no PII)
     event = {
         "httpMethod": "POST",
         "path": "/owners/register",
         "body": json.dumps(
             {
-                "name": "John Doe",
-                "email": "john@example.com",
-                "phone": "+1234567890",
-                "address": {
-                    "street": "123 Main St",
-                    "city": "Anytown",
-                    "state": "CA",
-                    "zip": "12345",
-                },
+                "preferences": {
+                    "notifications": True,
+                    "marketing_emails": False,
+                    "preferred_communication": "email"
+                }
             }
         ),
     }
@@ -66,52 +63,42 @@ def test_register_owner():
 
     assert response["statusCode"] == 201
     body = json.loads(response["body"])
-    assert body["name"] == "John Doe"
-    assert body["email"] == "john@example.com"
-    assert "id" in body
-    assert body["id"].startswith("owner-")
+    assert body["message"] == "Profile created successfully"
+    assert body["user_id"] == "test-user-123"
+    assert "preferences" in body
 
 
 @mock_aws
-def test_register_owner_duplicate_email():
-    """Test registering owner with duplicate email"""
+def test_register_owner_duplicate_profile():
+    """Test registering owner profile when one already exists"""
     # Setup mock DynamoDB
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
 
     # Create mock table
     dynamodb.create_table(
         TableName="owners-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
+        KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
         AttributeDefinitions=[
-            {"AttributeName": "id", "AttributeType": "S"},
-            {"AttributeName": "email", "AttributeType": "S"},
-        ],
-        GlobalSecondaryIndexes=[
-            {
-                "IndexName": "email-index",
-                "KeySchema": [{"AttributeName": "email", "KeyType": "HASH"}],
-                "Projection": {"ProjectionType": "ALL"},
-            }
+            {"AttributeName": "user_id", "AttributeType": "S"},
         ],
         BillingMode="PAY_PER_REQUEST",
     )
 
-    # Create existing owner
+    # Create existing owner profile
     owners_table = dynamodb.Table("owners-test")
     owners_table.put_item(
         Item={
-            "id": "owner-existing",
-            "name": "Existing Owner",
-            "email": "john@example.com",
+            "user_id": "test-user-123",
+            "preferences": {"notifications": True},
         }
     )
 
-    # Test event with duplicate email
+    # Test event with duplicate user
     event = {
         "httpMethod": "POST",
         "path": "/owners/register",
         "body": json.dumps(
-            {"name": "John Doe", "email": "john@example.com", "phone": "+1234567890"}
+            {"preferences": {"notifications": False}}
         ),
     }
 
@@ -120,7 +107,7 @@ def test_register_owner_duplicate_email():
 
     assert response["statusCode"] == 400
     body = json.loads(response["body"])
-    assert "Email already registered" in body["error"]
+    assert "Profile already exists" in body["error"]
 
 
 @mock_aws
@@ -132,26 +119,26 @@ def test_get_owner_profile():
     # Create mock table
     dynamodb.create_table(
         TableName="owners-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
+        KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
 
-    # Create test owner
+    # Create test owner profile
     test_owner = {
-        "id": "owner-123",
-        "name": "John Doe",
-        "email": "john@example.com",
-        "phone": "+1234567890",
+        "user_id": "test-user-123",
+        "preferences": {
+            "notifications": True,
+            "marketing_emails": False
+        },
     }
     owners_table = dynamodb.Table("owners-test")
     owners_table.put_item(Item=test_owner)
 
-    # Test event
+    # Test event (no query params needed with auth)
     event = {
         "httpMethod": "GET",
         "path": "/owners/profile",
-        "queryStringParameters": {"owner_id": "owner-123"},
     }
 
     with patch.dict(os.environ, {"OWNERS_TABLE": "owners-test"}):
@@ -159,8 +146,8 @@ def test_get_owner_profile():
 
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    assert body["name"] == "John Doe"
-    assert body["email"] == "john@example.com"
+    assert body["user_id"] == "test-user-123"
+    assert "preferences" in body
 
 
 @mock_aws
@@ -172,17 +159,18 @@ def test_update_owner_profile():
     # Create mock table
     dynamodb.create_table(
         TableName="owners-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
+        KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
 
-    # Create test owner
+    # Create test owner profile
     test_owner = {
-        "id": "owner-123",
-        "name": "John Doe",
-        "email": "john@example.com",
-        "phone": "+1234567890",
+        "user_id": "test-user-123",
+        "preferences": {
+            "notifications": True,
+            "marketing_emails": False
+        },
     }
     owners_table = dynamodb.Table("owners-test")
     owners_table.put_item(Item=test_owner)
@@ -191,8 +179,12 @@ def test_update_owner_profile():
     event = {
         "httpMethod": "PUT",
         "path": "/owners/profile",
-        "queryStringParameters": {"owner_id": "owner-123"},
-        "body": json.dumps({"name": "John Smith", "phone": "+0987654321"}),
+        "body": json.dumps({
+            "preferences": {
+                "notifications": False,
+                "marketing_emails": True
+            }
+        }),
     }
 
     with patch.dict(os.environ, {"OWNERS_TABLE": "owners-test"}):
@@ -200,71 +192,37 @@ def test_update_owner_profile():
 
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    assert body["name"] == "John Smith"
-    assert body["phone"] == "+0987654321"
+    assert body["user_id"] == "test-user-123"
+    assert body["preferences"]["notifications"] == False
+    assert body["preferences"]["marketing_emails"] == True
 
 
 @mock_aws
-def test_invalid_email():
-    """Test registration with invalid email"""
+def test_get_profile_creates_if_not_exists():
+    """Test getting profile creates one if it doesn't exist"""
     # Setup mock DynamoDB
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
 
-    # Create mock table
+    # Create mock table (empty)
     dynamodb.create_table(
         TableName="owners-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
+        KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
 
     event = {
-        "httpMethod": "POST",
-        "path": "/owners/register",
-        "body": json.dumps(
-            {"name": "John Doe", "email": "invalid-email", "phone": "+1234567890"}
-        ),
+        "httpMethod": "GET",
+        "path": "/owners/profile",
     }
 
     with patch.dict(os.environ, {"OWNERS_TABLE": "owners-test"}):
         response = lambda_handler(event, None)
 
-    assert response["statusCode"] == 400
+    assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    assert "Invalid email format" in body["error"]
-
-
-@mock_aws
-def test_missing_required_field():
-    """Test registration with missing required field"""
-    # Setup mock DynamoDB
-    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-
-    # Create mock table
-    dynamodb.create_table(
-        TableName="owners-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
-        BillingMode="PAY_PER_REQUEST",
-    )
-
-    event = {
-        "httpMethod": "POST",
-        "path": "/owners/register",
-        "body": json.dumps(
-            {
-                "name": "John Doe",
-                # Missing email and phone
-            }
-        ),
-    }
-
-    with patch.dict(os.environ, {"OWNERS_TABLE": "owners-test"}):
-        response = lambda_handler(event, None)
-
-    assert response["statusCode"] == 400
-    body = json.loads(response["body"])
-    assert "Missing required field" in body["error"]
+    assert body["user_id"] == "test-user-123"
+    assert "preferences" in body
 
 
 def test_invalid_json():
@@ -293,3 +251,52 @@ def test_unsupported_endpoint():
     assert response["statusCode"] == 404
     body = json.loads(response["body"])
     assert "Endpoint not found" in body["error"]
+
+
+
+def test_exception_handling():
+    """Test exception handling"""
+    event = {
+        "httpMethod": "GET",
+        "path": "/owners/profile",
+    }
+
+    # Don't set up environment variables to trigger exception
+    response = lambda_handler(event, None)
+
+    assert response["statusCode"] == 500
+    body = json.loads(response["body"])
+    assert "Internal server error" in body["error"]
+
+
+@mock_aws  
+def test_unverified_email():
+    """Test registration with unverified email"""
+    # Setup mock DynamoDB
+    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+
+    dynamodb.create_table(
+        TableName="owners-test",
+        KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    event = {
+        "httpMethod": "POST",
+        "path": "/owners/register",
+        "body": json.dumps({"preferences": {"notifications": True}}),
+        "auth_claims": {
+            "user_id": "test-user-123",
+            "email_verified": False,  # Unverified
+            "provider": "google.com"
+        }
+    }
+
+    # Mock is_user_verified to return False (handled by auth_claims)
+    with patch.dict(os.environ, {"OWNERS_TABLE": "owners-test"}):
+        response = lambda_handler(event, None)
+
+    assert response["statusCode"] == 400
+    body = json.loads(response["body"])
+    assert "Email verification required" in body["error"]

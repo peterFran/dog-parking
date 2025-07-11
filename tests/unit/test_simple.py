@@ -5,6 +5,14 @@ from unittest.mock import patch
 import sys
 import os
 
+# Add the test directory to the path
+test_dir = os.path.dirname(__file__)
+sys.path.insert(0, test_dir)
+
+# Set up auth mocks BEFORE importing anything else
+from auth_mock import setup_auth_mocks
+setup_auth_mocks()
+
 # Add the functions directory to the path
 dog_management_dir = os.path.join(
     os.path.dirname(__file__), "../../functions/dog_management"
@@ -20,30 +28,41 @@ from app import lambda_handler
 
 @mock_aws
 def test_create_dog_simple():
-    """Test creating a new dog - simplified version"""
+    """Test creating a new dog - simplified version with auth"""
     # Setup mock DynamoDB
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
 
-    # Create simple mock tables
+    # Create dogs table
     dynamodb.create_table(
         TableName="dogs-test",
         KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
+        AttributeDefinitions=[
+            {"AttributeName": "id", "AttributeType": "S"},
+            {"AttributeName": "owner_id", "AttributeType": "S"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "owner-index",
+                "KeySchema": [{"AttributeName": "owner_id", "KeyType": "HASH"}],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
         BillingMode="PAY_PER_REQUEST",
     )
 
+    # Create owners table with new schema
     dynamodb.create_table(
         TableName="owners-test",
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
+        KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
 
-    # Create a test owner
+    # Create a test owner profile
     owners_table = dynamodb.Table("owners-test")
-    owners_table.put_item(Item={"id": "owner-123", "name": "Test Owner"})
+    owners_table.put_item(Item={"user_id": "test-user-123", "preferences": {"notifications": True}})
 
-    # Test event
+    # Test event (no owner_id needed - comes from auth)
     event = {
         "httpMethod": "POST",
         "path": "/dogs",
@@ -53,7 +72,6 @@ def test_create_dog_simple():
                 "breed": "Golden Retriever",
                 "age": 3,
                 "size": "large",
-                "owner_id": "owner-123",
             }
         ),
     }
@@ -67,6 +85,7 @@ def test_create_dog_simple():
     body = json.loads(response["body"])
     assert body["name"] == "Buddy"
     assert body["breed"] == "Golden Retriever"
+    assert body["owner_id"] == "test-user-123"  # From auth
     assert "id" in body
 
 

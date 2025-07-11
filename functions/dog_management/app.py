@@ -6,13 +6,15 @@ import decimal
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 import logging
+import sys
+sys.path.append('/opt/python')
+from auth.app import require_auth, optional_auth, get_user_id_from_event
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # DynamoDB resource will be initialized in lambda_handler
-dynamodb = None
 
 
 def lambda_handler(event, context):
@@ -46,7 +48,7 @@ def lambda_handler(event, context):
         # Route to appropriate handler
         if http_method == "GET":
             if path_parameters.get("id"):
-                return get_dog(dogs_table, path_parameters["id"])
+                return get_dog(dogs_table, path_parameters["id"], event)
             else:
                 return list_dogs(dogs_table, event)
         elif http_method == "POST":
@@ -54,7 +56,7 @@ def lambda_handler(event, context):
         elif http_method == "PUT":
             return update_dog(dogs_table, path_parameters["id"], event)
         elif http_method == "DELETE":
-            return delete_dog(dogs_table, path_parameters["id"])
+            return delete_dog(dogs_table, path_parameters["id"], event)
         else:
             return create_response(405, {"error": "Method not allowed"})
 
@@ -63,36 +65,49 @@ def lambda_handler(event, context):
         return create_response(500, {"error": "Internal server error"})
 
 
-def get_dog(table, dog_id):
-    """Get a specific dog by ID"""
+@require_auth
+def get_dog(table, dog_id, event):
+    """Get a specific dog by ID (owner verification)"""
     try:
+        # Get user_id from authenticated claims
+        user_id = get_user_id_from_event(event)
+        
+        if not user_id:
+            return create_response(401, {"error": "Authentication required"})
+        
         response = table.get_item(Key={"id": dog_id})
 
         if "Item" not in response:
             return create_response(404, {"error": "Dog not found"})
+        
+        dog = response["Item"]
+        
+        # Verify ownership
+        if dog.get("owner_id") != user_id:
+            return create_response(403, {"error": "Access denied - not your dog"})
 
-        return create_response(200, response["Item"])
+        return create_response(200, dog)
 
     except ClientError as e:
         logger.error(f"Error getting dog: {str(e)}")
         return create_response(500, {"error": "Failed to get dog"})
 
 
+@require_auth
 def list_dogs(table, event):
-    """List all dogs for a specific owner"""
+    """List all dogs for authenticated user"""
     try:
-        # Get query parameters
-        query_params = event.get("queryStringParameters") or {}
-        owner_id = query_params.get("owner_id")
+        # Get user_id from authenticated claims
+        user_id = get_user_id_from_event(event)
+        
+        if not user_id:
+            return create_response(401, {"error": "Authentication required"})
 
-        if not owner_id:
-            return create_response(400, {"error": "owner_id is required"})
-
-        # Query using GSI
+        # Query using GSI with user_id
         from boto3.dynamodb.conditions import Key
 
         response = table.query(
-            IndexName="owner-index", KeyConditionExpression=Key("owner_id").eq(owner_id)
+            IndexName="owner-index", KeyConditionExpression=Key("owner_id").eq(user_id)
         )
 
         dogs = response.get("Items", [])
@@ -104,24 +119,31 @@ def list_dogs(table, event):
         return create_response(500, {"error": "Failed to list dogs"})
 
 
+@require_auth
 def create_dog(dogs_table, owners_table, event):
-    """Create a new dog"""
+    """Create a new dog for authenticated user"""
     try:
+        # Get user_id from authenticated claims
+        user_id = get_user_id_from_event(event)
+        
+        if not user_id:
+            return create_response(401, {"error": "Authentication required"})
+        
         # Parse request body
         body = json.loads(event.get("body", "{}"))
 
-        # Validate required fields
-        required_fields = ["name", "breed", "age", "size", "owner_id"]
+        # Validate required fields (no longer need owner_id from body)
+        required_fields = ["name", "breed", "age", "size"]
         for field in required_fields:
             if field not in body:
                 return create_response(
                     400, {"error": f"Missing required field: {field}"}
                 )
 
-        # Verify owner exists
-        owner_response = owners_table.get_item(Key={"id": body["owner_id"]})
+        # Verify user profile exists
+        owner_response = owners_table.get_item(Key={"user_id": user_id})
         if "Item" not in owner_response:
-            return create_response(404, {"error": "Owner not found"})
+            return create_response(400, {"error": "Please complete profile registration first"})
 
         # Validate age
         if not isinstance(body["age"], int) or body["age"] < 0:
@@ -144,7 +166,7 @@ def create_dog(dogs_table, owners_table, event):
             "breed": body["breed"],
             "age": int(body["age"]),
             "size": body["size"],
-            "owner_id": body["owner_id"],
+            "owner_id": user_id,  # Use authenticated user_id
             "vaccination_status": body.get("vaccination_status", "unknown"),
             "special_needs": body.get("special_needs", []),
             "emergency_contact": body.get("emergency_contact", ""),
@@ -154,7 +176,7 @@ def create_dog(dogs_table, owners_table, event):
 
         dogs_table.put_item(Item=dog_item)
 
-        logger.info(f"Created dog: {dog_id}")
+        logger.info(f"Created dog: {dog_id} for user: {user_id}")
         return create_response(201, dog_item)
 
     except json.JSONDecodeError:
@@ -166,16 +188,27 @@ def create_dog(dogs_table, owners_table, event):
         return create_response(500, {"error": "Failed to create dog"})
 
 
+@require_auth
 def update_dog(table, dog_id, event):
-    """Update an existing dog"""
+    """Update an existing dog (owner verification)"""
     try:
+        # Get user_id from authenticated claims
+        user_id = get_user_id_from_event(event)
+        
+        if not user_id:
+            return create_response(401, {"error": "Authentication required"})
+        
         # Parse request body
         body = json.loads(event.get("body", "{}"))
 
-        # Check if dog exists
+        # Check if dog exists and verify ownership
         existing_dog = table.get_item(Key={"id": dog_id})
         if "Item" not in existing_dog:
             return create_response(404, {"error": "Dog not found"})
+        
+        dog = existing_dog["Item"]
+        if dog.get("owner_id") != user_id:
+            return create_response(403, {"error": "Access denied - not your dog"})
 
         # Build update expression
         update_expression = "SET updated_at = :updated_at"
@@ -230,18 +263,29 @@ def update_dog(table, dog_id, event):
         return create_response(500, {"error": "Failed to update dog"})
 
 
-def delete_dog(table, dog_id):
-    """Delete a dog"""
+@require_auth
+def delete_dog(table, dog_id, event):
+    """Delete a dog (owner verification)"""
     try:
-        # Check if dog exists
+        # Get user_id from authenticated claims
+        user_id = get_user_id_from_event(event)
+        
+        if not user_id:
+            return create_response(401, {"error": "Authentication required"})
+        
+        # Check if dog exists and verify ownership
         existing_dog = table.get_item(Key={"id": dog_id})
         if "Item" not in existing_dog:
             return create_response(404, {"error": "Dog not found"})
+        
+        dog = existing_dog["Item"]
+        if dog.get("owner_id") != user_id:
+            return create_response(403, {"error": "Access denied - not your dog"})
 
         # Delete the dog
         table.delete_item(Key={"id": dog_id})
 
-        logger.info(f"Deleted dog: {dog_id}")
+        logger.info(f"Deleted dog: {dog_id} by user: {user_id}")
         return create_response(204, {})
 
     except ClientError as e:

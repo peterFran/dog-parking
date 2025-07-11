@@ -9,12 +9,18 @@ Parameters:
     Default: dev
     AllowedValues: [dev, staging, prod]
     Description: Environment name
+  GoogleProjectId:
+    Type: String
+    Description: Google Cloud Project ID for Firebase authentication
+    Default: ""
 
 Globals:
   Function:
     Timeout: 30
     MemorySize: 512
     Runtime: python3.11
+    Layers:
+      - !Ref AuthLayer
     Environment:
       Variables:
         ENVIRONMENT: !Ref Environment
@@ -22,6 +28,7 @@ Globals:
         OWNERS_TABLE: !Ref OwnersTable
         BOOKINGS_TABLE: !Ref BookingsTable
         VENUES_TABLE: !Ref VenuesTable
+        GOOGLE_PROJECT_ID: !Ref GoogleProjectId
   Api:
     Cors:
       AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
@@ -29,6 +36,17 @@ Globals:
       AllowOrigin: "'*'"
 
 Resources:
+  # Lambda Layer for Authentication
+  AuthLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub "auth-layer-${Environment}"
+      Description: Authentication layer with Google Firebase JWT verification
+      ContentUri: functions/auth/
+      CompatibleRuntimes:
+        - python3.11
+      RetentionPolicy: Delete
+
   # API Gateway
   DogCareApi:
     Type: AWS::Serverless::Api
@@ -316,20 +334,11 @@ Resources:
     Properties:
       TableName: !Sub "owners-${Environment}"
       AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-        - AttributeName: email
+        - AttributeName: user_id
           AttributeType: S
       KeySchema:
-        - AttributeName: id
+        - AttributeName: user_id
           KeyType: HASH
-      GlobalSecondaryIndexes:
-        - IndexName: email-index
-          KeySchema:
-            - AttributeName: email
-              KeyType: HASH
-          Projection:
-            ProjectionType: ALL
       BillingMode: PAY_PER_REQUEST
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES

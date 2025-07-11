@@ -1,0 +1,478 @@
+{
+	"info": {
+		"_postman_id": "dog-care-api-collection",
+		"name": "Dog Care API",
+		"description": "API collection for Dog Care application with Google Firebase authentication",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{firebase_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://YOUR_API_GATEWAY_URL/dev",
+			"type": "string",
+			"description": "Base URL for the Dog Care API"
+		},
+		{
+			"key": "firebase_token",
+			"value": "",
+			"type": "string",
+			"description": "Firebase ID token for authentication"
+		}
+	],
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Test Auth",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/owners/profile",
+							"host": ["{{base_url}}"],
+							"path": ["owners", "profile"]
+						},
+						"description": "Test authentication by getting user profile"
+					}
+				}
+			],
+			"description": "Authentication related requests"
+		},
+		{
+			"name": "Owner Management",
+			"item": [
+				{
+					"name": "Register Owner Profile",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"preferences\": {\n        \"notifications\": true,\n        \"marketing_emails\": false,\n        \"preferred_communication\": \"email\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/owners/register",
+							"host": ["{{base_url}}"],
+							"path": ["owners", "register"]
+						},
+						"description": "Register a new owner profile (claims-based, no PII)"
+					}
+				},
+				{
+					"name": "Get Owner Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/owners/profile",
+							"host": ["{{base_url}}"],
+							"path": ["owners", "profile"]
+						},
+						"description": "Get owner profile for authenticated user"
+					}
+				},
+				{
+					"name": "Update Owner Profile",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"preferences\": {\n        \"notifications\": false,\n        \"marketing_emails\": true,\n        \"preferred_communication\": \"sms\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/owners/profile",
+							"host": ["{{base_url}}"],
+							"path": ["owners", "profile"]
+						},
+						"description": "Update owner preferences"
+					}
+				}
+			],
+			"description": "Owner profile management (claims-based)"
+		},
+		{
+			"name": "Dog Management",
+			"item": [
+				{
+					"name": "Register Dog",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Buddy\",\n    \"breed\": \"Golden Retriever\",\n    \"age\": 3,\n    \"size\": \"large\",\n    \"vaccination_status\": \"up_to_date\",\n    \"special_needs\": [\"none\"],\n    \"emergency_contact\": \"Emergency contact info\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/dogs",
+							"host": ["{{base_url}}"],
+							"path": ["dogs"]
+						},
+						"description": "Register a new dog for authenticated user"
+					}
+				},
+				{
+					"name": "List Dogs",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/dogs",
+							"host": ["{{base_url}}"],
+							"path": ["dogs"]
+						},
+						"description": "List all dogs for authenticated user"
+					}
+				},
+				{
+					"name": "Get Dog Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/dogs/{{dog_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["dogs", "{{dog_id}}"]
+						},
+						"description": "Get details for a specific dog"
+					}
+				},
+				{
+					"name": "Update Dog",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"age\": 4,\n    \"vaccination_status\": \"up_to_date\",\n    \"special_needs\": [\"senior_care\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/dogs/{{dog_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["dogs", "{{dog_id}}"]
+						},
+						"description": "Update dog information"
+					}
+				},
+				{
+					"name": "Delete Dog",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/dogs/{{dog_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["dogs", "{{dog_id}}"]
+						},
+						"description": "Delete a dog"
+					}
+				}
+			],
+			"description": "Dog management operations"
+		},
+		{
+			"name": "Venue Management",
+			"item": [
+				{
+					"name": "List Venues",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/venues",
+							"host": ["{{base_url}}"],
+							"path": ["venues"]
+						},
+						"description": "List all available venues"
+					}
+				},
+				{
+					"name": "Get Venue Details",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/venues/{{venue_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["venues", "{{venue_id}}"]
+						},
+						"description": "Get details for a specific venue"
+					}
+				},
+				{
+					"name": "Get Venue Slots",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/venues/{{venue_id}}/slots?date=2024-12-15",
+							"host": ["{{base_url}}"],
+							"path": ["venues", "{{venue_id}}", "slots"],
+							"query": [
+								{
+									"key": "date",
+									"value": "2024-12-15",
+									"description": "Date in YYYY-MM-DD format"
+								}
+							]
+						},
+						"description": "Get available time slots for a venue on a specific date"
+					}
+				},
+				{
+					"name": "Create Venue (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Happy Paws Daycare\",\n    \"address\": {\n        \"street\": \"123 Dog Street\",\n        \"city\": \"Pet City\",\n        \"state\": \"CA\",\n        \"zip\": \"90210\"\n    },\n    \"capacity\": 25,\n    \"operating_hours\": {\n        \"monday\": {\"open\": true, \"start\": \"08:00\", \"end\": \"18:00\"},\n        \"tuesday\": {\"open\": true, \"start\": \"08:00\", \"end\": \"18:00\"},\n        \"wednesday\": {\"open\": true, \"start\": \"08:00\", \"end\": \"18:00\"},\n        \"thursday\": {\"open\": true, \"start\": \"08:00\", \"end\": \"18:00\"},\n        \"friday\": {\"open\": true, \"start\": \"08:00\", \"end\": \"18:00\"},\n        \"saturday\": {\"open\": true, \"start\": \"09:00\", \"end\": \"17:00\"},\n        \"sunday\": {\"open\": false}\n    },\n    \"services\": [\"daycare\", \"boarding\", \"grooming\"],\n    \"slot_duration\": 60\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/venues",
+							"host": ["{{base_url}}"],
+							"path": ["venues"]
+						},
+						"description": "Create a new venue (admin function)"
+					}
+				}
+			],
+			"description": "Venue management operations"
+		},
+		{
+			"name": "Booking Management",
+			"item": [
+				{
+					"name": "Create Booking",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dog_id\": \"{{dog_id}}\",\n    \"venue_id\": \"{{venue_id}}\",\n    \"service_type\": \"daycare\",\n    \"start_time\": \"2024-12-15T09:00:00Z\",\n    \"end_time\": \"2024-12-15T17:00:00Z\",\n    \"special_instructions\": \"Please give extra attention to my dog\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/bookings",
+							"host": ["{{base_url}}"],
+							"path": ["bookings"]
+						},
+						"description": "Create a new booking"
+					}
+				},
+				{
+					"name": "List Bookings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/bookings",
+							"host": ["{{base_url}}"],
+							"path": ["bookings"]
+						},
+						"description": "List all bookings for authenticated user"
+					}
+				},
+				{
+					"name": "Get Booking Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/bookings/{{booking_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["bookings", "{{booking_id}}"]
+						},
+						"description": "Get details for a specific booking"
+					}
+				},
+				{
+					"name": "Update Booking",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"special_instructions\": \"Updated instructions for the booking\",\n    \"status\": \"confirmed\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/bookings/{{booking_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["bookings", "{{booking_id}}"]
+						},
+						"description": "Update booking details"
+					}
+				},
+				{
+					"name": "Cancel Booking",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{firebase_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/bookings/{{booking_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["bookings", "{{booking_id}}"]
+						},
+						"description": "Cancel a booking"
+					}
+				}
+			],
+			"description": "Booking management operations"
+		},
+		{
+			"name": "Documentation",
+			"item": [
+				{
+					"name": "API Documentation",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/docs",
+							"host": ["{{base_url}}"],
+							"path": ["docs"]
+						},
+						"description": "Access Swagger UI documentation"
+					}
+				},
+				{
+					"name": "OpenAPI Specification",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/openapi.json",
+							"host": ["{{base_url}}"],
+							"path": ["openapi.json"]
+						},
+						"description": "Get OpenAPI specification in JSON format"
+					}
+				}
+			],
+			"description": "API documentation endpoints"
+		}
+	]
+}

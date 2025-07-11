@@ -6,13 +6,15 @@ import decimal
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 import logging
+import sys
+sys.path.append('/opt/python')
+from auth.app import require_auth, optional_auth, get_user_id_from_event
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # DynamoDB resource will be initialized in lambda_handler
-dynamodb = None
 
 
 def lambda_handler(event, context):
@@ -54,7 +56,7 @@ def lambda_handler(event, context):
             else:
                 return list_bookings(bookings_table, event)
         elif http_method == "POST":
-            return create_booking(bookings_table, dogs_table, owners_table, venues_table, event)
+            return create_booking_with_auth(bookings_table, dogs_table, owners_table, venues_table, event)
         elif http_method == "PUT":
             return update_booking(bookings_table, path_parameters["id"], event)
         elif http_method == "DELETE":
@@ -82,21 +84,18 @@ def get_booking(table, booking_id):
         return create_response(500, {"error": "Failed to get booking"})
 
 
+@require_auth
 def list_bookings(table, event):
-    """List all bookings for a specific owner"""
+    """List all bookings for authenticated user"""
     try:
-        # Get query parameters
-        query_params = event.get("queryStringParameters") or {}
-        owner_id = query_params.get("owner_id")
-
-        if not owner_id:
-            return create_response(400, {"error": "owner_id is required"})
+        # Get owner ID from auth claims
+        owner_id = get_user_id_from_event(event)
 
         # Query using GSI
         from boto3.dynamodb.conditions import Key
 
         response = table.query(
-            IndexName="owner-time-index",
+            IndexName="owner-index",
             KeyConditionExpression=Key("owner_id").eq(owner_id),
             ScanIndexForward=False,  # Sort by start_time descending
         )
@@ -110,16 +109,19 @@ def list_bookings(table, event):
         return create_response(500, {"error": "Failed to list bookings"})
 
 
-def create_booking(bookings_table, dogs_table, owners_table, venues_table, event):
-    """Create a new booking"""
+@require_auth
+def create_booking_with_auth(bookings_table, dogs_table, owners_table, venues_table, event):
+    """Create a new booking with authentication"""
     try:
+        # Get user ID from auth claims
+        user_id = get_user_id_from_event(event)
+        
         # Parse request body
         body = json.loads(event.get("body", "{}"))
 
-        # Validate required fields
+        # Validate required fields (owner_id not needed - comes from auth)
         required_fields = [
             "dog_id",
-            "owner_id",
             "venue_id",
             "service_type",
             "start_time",
@@ -131,19 +133,19 @@ def create_booking(bookings_table, dogs_table, owners_table, venues_table, event
                     400, {"error": f"Missing required field: {field}"}
                 )
 
-        # Verify dog exists and belongs to owner
+        # Verify dog exists and belongs to authenticated user
         dog_response = dogs_table.get_item(Key={"id": body["dog_id"]})
         if "Item" not in dog_response:
             return create_response(404, {"error": "Dog not found"})
 
         dog = dog_response["Item"]
-        if dog["owner_id"] != body["owner_id"]:
+        if dog["owner_id"] != user_id:
             return create_response(403, {"error": "Dog does not belong to this owner"})
 
-        # Verify owner exists
-        owner_response = owners_table.get_item(Key={"id": body["owner_id"]})
+        # Verify owner profile exists (new schema)
+        owner_response = owners_table.get_item(Key={"user_id": user_id})
         if "Item" not in owner_response:
-            return create_response(404, {"error": "Owner not found"})
+            return create_response(404, {"error": "Owner profile not found"})
 
         # Verify venue exists
         venue_response = venues_table.get_item(Key={"id": body["venue_id"]})
@@ -189,7 +191,7 @@ def create_booking(bookings_table, dogs_table, owners_table, venues_table, event
         booking_item = {
             "id": booking_id,
             "dog_id": body["dog_id"],
-            "owner_id": body["owner_id"],
+            "owner_id": user_id,  # Use authenticated user ID
             "venue_id": body["venue_id"],
             "service_type": body["service_type"],
             "start_time": body["start_time"],

@@ -7,13 +7,15 @@ from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 import logging
 import re
+import sys
+sys.path.append('/opt/python')
+from auth.app import require_auth, optional_auth, get_user_id_from_event, is_user_verified
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # DynamoDB resource will be initialized in lambda_handler
-dynamodb = None
 
 
 def lambda_handler(event, context):
@@ -58,138 +60,150 @@ def lambda_handler(event, context):
         return create_response(500, {"error": "Internal server error"})
 
 
+@require_auth
 def get_owner_profile(table, event):
-    """Get owner profile by ID"""
+    """Get owner profile by user claims (no PII stored)"""
     try:
-        # In a real app, you'd get owner_id from JWT token
-        # For now, we'll use query parameter
-        query_params = event.get("queryStringParameters") or {}
-        owner_id = query_params.get("owner_id")
-
-        if not owner_id:
-            return create_response(400, {"error": "owner_id is required"})
-
-        response = table.get_item(Key={"id": owner_id})
-
+        # Get user_id from authenticated claims
+        user_id = get_user_id_from_event(event)
+        
+        if not user_id:
+            return create_response(401, {"error": "Authentication required"})
+        
+        # Get user preferences/profile (non-PII data)
+        response = table.get_item(Key={"user_id": user_id})
+        
         if "Item" not in response:
-            return create_response(404, {"error": "Owner not found"})
-
-        # Remove sensitive information if needed
-        owner_data = response["Item"]
-        return create_response(200, owner_data)
-
+            # Create basic profile if doesn't exist
+            profile_data = {
+                "user_id": user_id,
+                "preferences": {
+                    "notifications": True,
+                    "marketing_emails": False
+                },
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            table.put_item(Item=profile_data)
+            return create_response(200, profile_data)
+        
+        profile_data = response["Item"]
+        return create_response(200, profile_data)
+        
     except ClientError as e:
-        logger.error(f"Error getting owner: {str(e)}")
-        return create_response(500, {"error": "Failed to get owner"})
+        logger.error(f"Error getting owner profile: {str(e)}")
+        return create_response(500, {"error": "Failed to get owner profile"})
 
 
+@require_auth
 def update_owner_profile(table, event):
-    """Update owner profile"""
+    """Update owner profile (non-PII preferences only)"""
     try:
         # Parse request body
         body = json.loads(event.get("body", "{}"))
-
-        # In a real app, you'd get owner_id from JWT token
-        query_params = event.get("queryStringParameters") or {}
-        owner_id = query_params.get("owner_id")
-
-        if not owner_id:
-            return create_response(400, {"error": "owner_id is required"})
-
-        # Check if owner exists
-        existing_owner = table.get_item(Key={"id": owner_id})
-        if "Item" not in existing_owner:
-            return create_response(404, {"error": "Owner not found"})
-
+        
+        # Get user_id from authenticated claims
+        user_id = get_user_id_from_event(event)
+        
+        if not user_id:
+            return create_response(401, {"error": "Authentication required"})
+        
+        # Check if profile exists
+        existing_profile = table.get_item(Key={"user_id": user_id})
+        
         # Build update expression
         update_expression = "SET updated_at = :updated_at"
         expression_values = {":updated_at": datetime.now(timezone.utc).isoformat()}
-
-        # Update allowed fields
-        allowed_fields = ["name", "phone", "address"]
-        expression_names = {}
+        
+        # Update allowed fields (only non-PII preferences)
+        allowed_fields = ["preferences", "notification_settings"]
+        
         for field in allowed_fields:
             if field in body:
-                if field == "name":
-                    # 'name' is a reserved keyword in DynamoDB
-                    update_expression += f", #name = :name"
-                    expression_names["#name"] = "name"
-                    expression_values[":name"] = body[field]
-                else:
-                    update_expression += f", {field} = :{field}"
-                    expression_values[f":{field}"] = body[field]
-
-        # Update the item
-        update_params = {
-            "Key": {"id": owner_id},
-            "UpdateExpression": update_expression,
-            "ExpressionAttributeValues": expression_values,
-            "ReturnValues": "ALL_NEW",
-        }
-        if expression_names:
-            update_params["ExpressionAttributeNames"] = expression_names
-
-        response = table.update_item(**update_params)
-
-        logger.info(f"Updated owner: {owner_id}")
+                update_expression += f", {field} = :{field}"
+                expression_values[f":{field}"] = body[field]
+        
+        # If profile doesn't exist, create it
+        if "Item" not in existing_profile:
+            profile_data = {
+                "user_id": user_id,
+                "preferences": body.get("preferences", {
+                    "notifications": True,
+                    "marketing_emails": False
+                }),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            table.put_item(Item=profile_data)
+            return create_response(200, profile_data)
+        
+        # Update existing profile
+        response = table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values,
+            ReturnValues="ALL_NEW"
+        )
+        
+        logger.info(f"Updated owner profile: {user_id}")
         return create_response(200, response["Attributes"])
-
+        
     except json.JSONDecodeError:
         return create_response(400, {"error": "Invalid JSON in request body"})
     except ClientError as e:
-        logger.error(f"Error updating owner: {str(e)}")
-        return create_response(500, {"error": "Failed to update owner"})
+        logger.error(f"Error updating owner profile: {str(e)}")
+        return create_response(500, {"error": "Failed to update owner profile"})
 
 
+@require_auth
 def register_owner(table, event):
-    """Register a new owner"""
+    """Register owner profile (claims-based, no PII storage)"""
     try:
-        # Parse request body
+        # Get user_id from authenticated claims
+        user_id = get_user_id_from_event(event)
+        
+        if not user_id:
+            return create_response(401, {"error": "Authentication required"})
+        
+        # Verify user's email is verified
+        if not is_user_verified(event):
+            return create_response(400, {"error": "Email verification required"})
+        
+        # Parse request body for preferences
         body = json.loads(event.get("body", "{}"))
-
-        # Validate required fields
-        required_fields = ["name", "email", "phone"]
-        for field in required_fields:
-            if field not in body:
-                return create_response(
-                    400, {"error": f"Missing required field: {field}"}
-                )
-
-        # Validate email format
-        if not validate_email(body["email"]):
-            return create_response(400, {"error": "Invalid email format"})
-
-        # Check if email already exists
-        from boto3.dynamodb.conditions import Key
-
-        existing_owner = table.query(
-            IndexName="email-index",
-            KeyConditionExpression=Key("email").eq(body["email"]),
-        )
-
-        if existing_owner.get("Items"):
-            return create_response(400, {"error": "Email already registered"})
-
-        # Create owner record
-        owner_id = f"owner-{uuid.uuid4()}"
+        
+        # Check if profile already exists
+        existing_profile = table.get_item(Key={"user_id": user_id})
+        
+        if "Item" in existing_profile:
+            return create_response(400, {"error": "Profile already exists"})
+        
+        # Create owner profile record (no PII)
         now = datetime.now(timezone.utc).isoformat()
-
-        owner_item = {
-            "id": owner_id,
-            "name": body["name"],
-            "email": body["email"],
-            "phone": body["phone"],
-            "address": body.get("address", {}),
-            "dogs": [],
+        
+        owner_profile = {
+            "user_id": user_id,  # Google user ID (not PII)
+            "preferences": body.get("preferences", {
+                "notifications": True,
+                "marketing_emails": False,
+                "preferred_communication": "email"
+            }),
+            "registration_complete": True,
             "created_at": now,
-            "updated_at": now,
+            "updated_at": now
         }
-
-        table.put_item(Item=owner_item)
-
-        logger.info(f"Created owner: {owner_id}")
-        return create_response(201, owner_item)
-
+        
+        table.put_item(Item=owner_profile)
+        
+        logger.info(f"Created owner profile: {user_id}")
+        return create_response(201, {
+            "message": "Profile created successfully",
+            "user_id": user_id,
+            "preferences": owner_profile["preferences"]
+        })
+        
     except json.JSONDecodeError:
         return create_response(400, {"error": "Invalid JSON in request body"})
     except ClientError as e:
