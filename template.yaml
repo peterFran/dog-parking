@@ -332,7 +332,7 @@ Resources:
   OwnersTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "owners-${Environment}"
+      TableName: !Sub "owners-v2-${Environment}"
       AttributeDefinitions:
         - AttributeName: user_id
           AttributeType: S
