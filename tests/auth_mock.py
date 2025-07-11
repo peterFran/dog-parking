@@ -59,7 +59,7 @@ def setup_auth_mocks():
     mock_auth_module.is_user_verified = mock_is_user_verified
     
     # Mock the auth module at the top level
-    sys.modules['auth'] = MagicMock()
+    sys.modules['auth'] = mock_auth_module
     sys.modules['auth.app'] = mock_auth_module
     
     return mock_auth_module
