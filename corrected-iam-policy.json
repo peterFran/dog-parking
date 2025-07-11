@@ -172,6 +172,23 @@
             ]
         },
         {
+            "Sid": "LambdaLayerAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:PublishLayerVersion",
+                "lambda:GetLayerVersion",
+                "lambda:ListLayerVersions",
+                "lambda:ListLayers",
+                "lambda:DeleteLayerVersion",
+                "lambda:AddLayerVersionPermission",
+                "lambda:RemoveLayerVersionPermission"
+            ],
+            "Resource": [
+                "arn:aws:lambda:*:*:layer:auth-layer-*",
+                "arn:aws:lambda:*:*:layer:auth-layer-*:*"
+            ]
+        },
+        {
             "Sid": "CloudWatchLogsAccess",
             "Effect": "Allow",
             "Action": [
