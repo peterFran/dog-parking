@@ -13,17 +13,22 @@ def mock_require_auth(handler_func):
 
     @wraps(handler_func)
     def wrapper(*args, **kwargs):
-        # args[1] should be the event
-        if len(args) >= 2:
-            event = args[1] if isinstance(args[1], dict) else args[0]
-            if isinstance(event, dict):
-                # Only add auth_claims if they don't already exist
-                if "auth_claims" not in event:
-                    event["auth_claims"] = {
-                        "user_id": "test-user-123",
-                        "email_verified": True,
-                        "provider": "google.com",
-                    }
+        # Find the event in arguments - should be first or second argument
+        event = None
+        if len(args) >= 1 and isinstance(args[0], dict) and ('httpMethod' in args[0] or 'auth_claims' in args[0]):
+            event = args[0]
+        elif len(args) >= 2 and isinstance(args[1], dict) and ('httpMethod' in args[1] or 'auth_claims' in args[1]):
+            event = args[1]
+        
+        if event and isinstance(event, dict):
+            # Only add auth_claims if they don't already exist
+            if "auth_claims" not in event:
+                event["auth_claims"] = {
+                    "user_id": "test-user-123",
+                    "email_verified": True,
+                    "provider": "google.com",
+                }
+        
         return handler_func(*args, **kwargs)
 
     return wrapper
@@ -34,14 +39,20 @@ def mock_optional_auth(handler_func):
 
     @wraps(handler_func)
     def wrapper(*args, **kwargs):
-        if len(args) >= 2:
-            event = args[1] if isinstance(args[1], dict) else args[0]
-            if isinstance(event, dict) and "auth_claims" not in event:
-                event["auth_claims"] = {
-                    "user_id": "test-user-123",
-                    "email_verified": True,
-                    "provider": "google.com",
-                }
+        # Find the event in arguments - should be first or second argument
+        event = None
+        if len(args) >= 1 and isinstance(args[0], dict) and ('httpMethod' in args[0] or 'auth_claims' in args[0]):
+            event = args[0]
+        elif len(args) >= 2 and isinstance(args[1], dict) and ('httpMethod' in args[1] or 'auth_claims' in args[1]):
+            event = args[1]
+        
+        if event and isinstance(event, dict) and "auth_claims" not in event:
+            event["auth_claims"] = {
+                "user_id": "test-user-123",
+                "email_verified": True,
+                "provider": "google.com",
+            }
+        
         return handler_func(*args, **kwargs)
 
     return wrapper

@@ -125,7 +125,18 @@ def require_auth(handler_func):
     """Decorator to require authentication for Lambda functions"""
 
     @wraps(handler_func)
-    def wrapper(event, context):
+    def wrapper(*args, **kwargs):
+        # Extract event from arguments - should be first or second argument
+        event = None
+        if len(args) >= 1 and isinstance(args[0], dict) and 'httpMethod' in args[0]:
+            event = args[0]
+        elif len(args) >= 2 and isinstance(args[1], dict) and 'httpMethod' in args[1]:
+            event = args[1]
+        
+        if not event:
+            logger.error("Could not find event in function arguments")
+            return create_response(500, {"error": "Authentication service error"})
+        
         try:
             # Extract token
             token = extract_token_from_event(event)
@@ -154,8 +165,8 @@ def require_auth(handler_func):
             # Add claims to event context
             event["auth_claims"] = claims
 
-            # Call original handler
-            return handler_func(event, context)
+            # Call original handler with all arguments
+            return handler_func(*args, **kwargs)
 
         except Exception as e:
             logger.error(f"Authentication error: {str(e)}")
@@ -168,24 +179,32 @@ def optional_auth(handler_func):
     """Decorator for optional authentication (adds claims if token present)"""
 
     @wraps(handler_func)
-    def wrapper(event, context):
+    def wrapper(*args, **kwargs):
+        # Extract event from arguments - should be first or second argument
+        event = None
+        if len(args) >= 1 and isinstance(args[0], dict) and 'httpMethod' in args[0]:
+            event = args[0]
+        elif len(args) >= 2 and isinstance(args[1], dict) and 'httpMethod' in args[1]:
+            event = args[1]
+        
         try:
-            # Extract token
-            token = extract_token_from_event(event)
+            if event:
+                # Extract token
+                token = extract_token_from_event(event)
 
-            if token:
-                # Verify token if present
-                claims = verify_firebase_token(token)
-                if claims:
-                    event["auth_claims"] = claims
+                if token:
+                    # Verify token if present
+                    claims = verify_firebase_token(token)
+                    if claims:
+                        event["auth_claims"] = claims
 
             # Call original handler (with or without claims)
-            return handler_func(event, context)
+            return handler_func(*args, **kwargs)
 
         except Exception as e:
             logger.error(f"Optional authentication error: {str(e)}")
             # Continue without auth on error
-            return handler_func(event, context)
+            return handler_func(*args, **kwargs)
 
     return wrapper
 
