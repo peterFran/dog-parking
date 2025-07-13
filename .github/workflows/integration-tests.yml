@@ -69,6 +69,21 @@ jobs:
           BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}"
           echo "📦 Using S3 bucket: $BUCKET_NAME"
           
+          # Try to reuse an existing bucket from staging first
+          EXISTING_BUCKET_BASE="dog-care-sam-deployments-$(date +%Y%m%d)"
+          
+          # Look for any existing bucket with today's date
+          for i in {1..100}; do
+            TEST_BUCKET="${EXISTING_BUCKET_BASE}-${i}"
+            if aws s3 ls "s3://$TEST_BUCKET" >/dev/null 2>&1; then
+              echo "✅ Found existing bucket: $TEST_BUCKET"
+              BUCKET_NAME="$TEST_BUCKET"
+              break
+            fi
+          done
+          
+          echo "📦 Final bucket choice: $BUCKET_NAME"
+          
           sam deploy \
             --template-file .aws-sam/build/template.yaml \
             --stack-name ${{ env.TEST_STACK_NAME }} \
