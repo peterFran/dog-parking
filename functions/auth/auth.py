@@ -7,6 +7,8 @@ from jwt.exceptions import DecodeError, ExpiredSignatureError
 import requests
 from functools import wraps
 from typing import Dict, Optional, Any
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 
 # Configure logging
 logger = logging.getLogger()
@@ -70,18 +72,45 @@ def verify_firebase_token(token: str) -> Optional[Dict[str, Any]]:
         public_key_cert = public_keys[key_id]
         logger.info(f"Public key cert type: {type(public_key_cert)}")
         logger.info(f"Public key cert length: {len(public_key_cert)}")
-        logger.info(f"Public key cert starts with: {public_key_cert[:100]}...")
         
         # Check if it's a valid PEM certificate
         if not public_key_cert.startswith('-----BEGIN'):
             logger.error(f"Invalid certificate format. Expected PEM, got: {public_key_cert[:50]}...")
             return None
 
+        # Ensure the certificate has proper line breaks
+        # Sometimes the certificate comes as a single line and needs to be reformatted
+        if '\n' not in public_key_cert:
+            # If no line breaks, it's likely a single-line certificate that needs formatting
+            lines = []
+            cert_content = public_key_cert.replace('-----BEGIN CERTIFICATE-----', '').replace('-----END CERTIFICATE-----', '').replace(' ', '')
+            
+            lines.append('-----BEGIN CERTIFICATE-----')
+            # Split into 64-character lines
+            for i in range(0, len(cert_content), 64):
+                lines.append(cert_content[i:i+64])
+            lines.append('-----END CERTIFICATE-----')
+            
+            public_key_cert = '\n'.join(lines)
+            logger.info("Reformatted certificate with proper line breaks")
+
         try:
+            # Parse the certificate and extract the public key
+            cert = x509.load_pem_x509_certificate(public_key_cert.encode('utf-8'))
+            public_key = cert.public_key()
+            
+            # Convert to PEM format for PyJWT
+            public_key_pem = public_key.public_key_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            )
+            
+            logger.info("Successfully extracted public key from certificate")
+            
             # Verify and decode token
             decoded_token = jwt.decode(
                 token,
-                public_key_cert,
+                public_key_pem,
                 algorithms=["RS256"],
                 audience=project_id,
                 issuer=f"https://securetoken.google.com/{project_id}",
@@ -91,6 +120,11 @@ def verify_firebase_token(token: str) -> Optional[Dict[str, Any]]:
             logger.error(f"Token preview: {token[:50]}...")
             logger.error(f"Audience: {project_id}")
             logger.error(f"Issuer: https://securetoken.google.com/{project_id}")
+            # Log a few lines of the certificate for debugging (without exposing the full cert)
+            cert_lines = public_key_cert.split('\n')
+            logger.error(f"Certificate format check - Lines: {len(cert_lines)}")
+            logger.error(f"First line: {cert_lines[0] if cert_lines else 'None'}")
+            logger.error(f"Last line: {cert_lines[-1] if cert_lines else 'None'}")
             raise
 
         # Extract claims we need (no PII)

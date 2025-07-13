@@ -18,7 +18,7 @@ Globals:
   Function:
     Timeout: 30
     MemorySize: 512
-    Runtime: python3.11
+    Runtime: python3.13
     Layers:
       - !Ref AuthLayer
     Environment:
@@ -44,10 +44,10 @@ Resources:
       Description: Authentication layer with Google Firebase JWT verification
       ContentUri: functions/auth/
       CompatibleRuntimes:
-        - python3.11
+        - python3.13
       RetentionPolicy: Delete
     Metadata:
-      BuildMethod: python3.11
+      BuildMethod: python3.13
 
   # API Gateway
   DogCareApi:
