@@ -52,20 +52,29 @@ def verify_emulator_token(token: str, project_id: str) -> Optional[Dict[str, Any
         logger.info("Verifying Firebase emulator token")
         
         # Decode without verification for emulator tokens
+        # PyJWT requires a key parameter even when verify_signature is False
         decoded_token = jwt.decode(
             token,
-            options={"verify_signature": False},
-            algorithms=["none", "RS256"]  # Emulator can use either
+            key="",  # Empty key since we're not verifying signature
+            algorithms=["RS256"],  # Firebase emulator uses RS256
+            options={
+                "verify_signature": False,
+                "verify_exp": False,  # Don't verify expiration for testing
+                "verify_aud": False,  # We'll manually verify audience
+                "verify_iss": False   # We'll manually verify issuer
+            }
         )
+        
+        logger.info(f"Decoded emulator token: aud={decoded_token.get('aud')}, iss={decoded_token.get('iss')}")
         
         # Validate basic emulator token structure
         if decoded_token.get("aud") != project_id:
-            logger.error(f"Invalid audience in emulator token: {decoded_token.get('aud')}")
+            logger.error(f"Invalid audience in emulator token: {decoded_token.get('aud')}, expected: {project_id}")
             return None
         
         expected_issuer = f"https://securetoken.google.com/{project_id}"
         if decoded_token.get("iss") != expected_issuer:
-            logger.error(f"Invalid issuer in emulator token: {decoded_token.get('iss')}")
+            logger.error(f"Invalid issuer in emulator token: {decoded_token.get('iss')}, expected: {expected_issuer}")
             return None
         
         # Extract claims we need (no PII)
@@ -83,6 +92,7 @@ def verify_emulator_token(token: str, project_id: str) -> Optional[Dict[str, Any
         
     except Exception as e:
         logger.error(f"Emulator token verification failed: {str(e)}")
+        logger.error(f"Token preview: {token[:50]}...")
         return None
 
 
