@@ -7,7 +7,7 @@ Parameters:
   Environment:
     Type: String
     Default: dev
-    AllowedValues: [dev, staging, prod]
+    AllowedValues: [dev, test, staging, prod]
     Description: Environment name
   GoogleProjectId:
     Type: String
