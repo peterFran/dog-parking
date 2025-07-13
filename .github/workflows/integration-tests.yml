@@ -64,60 +64,51 @@ jobs:
         run: |
           echo "Deploying test stack: ${{ env.TEST_STACK_NAME }}"
           
-          # Function to attempt deployment with different bucket strategies
-          deploy_sam() {
-            local bucket_name=$1
-            echo "📦 Attempting deployment with S3 bucket: $bucket_name"
-            
-            sam deploy \
-              --template-file .aws-sam/build/template.yaml \
-              --stack-name ${{ env.TEST_STACK_NAME }} \
-              --parameter-overrides "Environment=test GoogleProjectId=${{ env.TEST_PROJECT_ID }}" \
-              --capabilities CAPABILITY_IAM \
-              --region ${{ env.AWS_REGION }} \
-              --no-fail-on-empty-changeset \
-              --no-confirm-changeset \
-              --s3-bucket $bucket_name \
-              --debug
-          }
+          # Try using SAM's guided approach which should handle S3 bucket creation
+          echo "🚀 Attempting SAM deployment with guided configuration..."
           
-          # Try to find an existing staging bucket first
-          EXISTING_BUCKET=$(aws s3api list-buckets --query 'Buckets[?contains(Name, `dog-care-sam-deployments`)].Name' --output text | head -1)
+          # First, try with a specific bucket name that might already exist
+          # Use a pattern that matches your staging deployments
+          BUCKET_NAME="aws-sam-cli-managed-default-samclisourcebucket-$(echo ${{ env.AWS_REGION }} | tr -d '-')"
           
-          if [ ! -z "$EXISTING_BUCKET" ]; then
-            echo "🎯 Found existing S3 bucket: $EXISTING_BUCKET"
-            if deploy_sam $EXISTING_BUCKET; then
-              echo "✅ Deployment succeeded with existing bucket!"
-              exit 0
-            fi
-          fi
-          
-          # Try creating a new bucket (may fail due to permissions)
-          BUCKET_NAME="dog-care-test-deployments-$(date +%Y%m%d)-${{ github.run_id }}"
-          echo "🪣 Attempting to create new bucket: $BUCKET_NAME"
-          
-          if aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }}; then
-            echo "✅ Created new bucket successfully"
-            if deploy_sam $BUCKET_NAME; then
-              echo "✅ Deployment succeeded with new bucket!"
-              exit 0
-            fi
-          else
-            echo "⚠️  Bucket creation failed, trying with date-based fallback..."
-            FALLBACK_BUCKET="dog-care-test-deployments-$(date +%Y%m%d)"
-            
-            if aws s3 mb s3://$FALLBACK_BUCKET --region ${{ env.AWS_REGION }}; then
-              echo "✅ Created fallback bucket successfully"
-              if deploy_sam $FALLBACK_BUCKET; then
-                echo "✅ Deployment succeeded with fallback bucket!"
-                exit 0
-              fi
-            else
-              echo "❌ All bucket creation attempts failed"
-              echo "❌ Cannot proceed without S3 bucket for SAM deployment"
-              exit 1
-            fi
-          fi
+          sam deploy \
+            --template-file .aws-sam/build/template.yaml \
+            --stack-name ${{ env.TEST_STACK_NAME }} \
+            --parameter-overrides "Environment=test GoogleProjectId=${{ env.TEST_PROJECT_ID }}" \
+            --capabilities CAPABILITY_IAM \
+            --region ${{ env.AWS_REGION }} \
+            --no-fail-on-empty-changeset \
+            --no-confirm-changeset \
+            --s3-bucket $BUCKET_NAME \
+            --debug || {
+              echo "⚠️  First attempt failed, trying with guided deployment..."
+              
+              # If that fails, try sam deploy without specifying bucket (let SAM manage it)
+              sam deploy \
+                --template-file .aws-sam/build/template.yaml \
+                --stack-name ${{ env.TEST_STACK_NAME }} \
+                --parameter-overrides "Environment=test GoogleProjectId=${{ env.TEST_PROJECT_ID }}" \
+                --capabilities CAPABILITY_IAM \
+                --region ${{ env.AWS_REGION }} \
+                --no-fail-on-empty-changeset \
+                --no-confirm-changeset \
+                --guided \
+                --debug || {
+                  echo "❌ Guided deployment failed, trying resolve-s3..."
+                  
+                  # Last resort: try resolve-s3 (may work if user has the right permissions)
+                  sam deploy \
+                    --template-file .aws-sam/build/template.yaml \
+                    --stack-name ${{ env.TEST_STACK_NAME }} \
+                    --parameter-overrides "Environment=test GoogleProjectId=${{ env.TEST_PROJECT_ID }}" \
+                    --capabilities CAPABILITY_IAM \
+                    --region ${{ env.AWS_REGION }} \
+                    --no-fail-on-empty-changeset \
+                    --no-confirm-changeset \
+                    --resolve-s3 \
+                    --debug
+                }
+            }
       
       - name: Get API endpoint from stack
         id: get-api-url
