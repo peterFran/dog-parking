@@ -100,7 +100,7 @@ def verify_firebase_token(token: str) -> Optional[Dict[str, Any]]:
             public_key = cert.public_key()
             
             # Convert to PEM format for PyJWT
-            public_key_pem = public_key.public_key_bytes(
+            public_key_pem = public_key.public_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PublicFormat.SubjectPublicKeyInfo
             )
