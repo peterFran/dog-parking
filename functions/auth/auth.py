@@ -47,6 +47,9 @@ def get_google_public_keys():
 def verify_firebase_token(token: str) -> Optional[Dict[str, Any]]:
     """Verify Firebase JWT token and extract claims"""
     try:
+        project_id = os.environ.get("GOOGLE_PROJECT_ID")
+        logger.info(f"Verifying token for project: {project_id}")
+        
         # Get Google's public keys
         public_keys = get_google_public_keys()
 
@@ -57,22 +60,38 @@ def verify_firebase_token(token: str) -> Optional[Dict[str, Any]]:
         # Decode token header to get key ID
         unverified_header = jwt.get_unverified_header(token)
         key_id = unverified_header.get("kid")
+        logger.info(f"Token key ID: {key_id}")
 
         if not key_id or key_id not in public_keys:
-            logger.error(f"Invalid key ID: {key_id}")
+            logger.error(f"Invalid key ID: {key_id}, available keys: {list(public_keys.keys())}")
             return None
 
-        # Get the public key
-        public_key = public_keys[key_id]
+        # Get the public key certificate
+        public_key_cert = public_keys[key_id]
+        logger.info(f"Public key cert type: {type(public_key_cert)}")
+        logger.info(f"Public key cert length: {len(public_key_cert)}")
+        logger.info(f"Public key cert starts with: {public_key_cert[:100]}...")
+        
+        # Check if it's a valid PEM certificate
+        if not public_key_cert.startswith('-----BEGIN'):
+            logger.error(f"Invalid certificate format. Expected PEM, got: {public_key_cert[:50]}...")
+            return None
 
-        # Verify and decode token
-        decoded_token = jwt.decode(
-            token,
-            public_key,
-            algorithms=["RS256"],
-            audience=os.environ.get("GOOGLE_PROJECT_ID"),
-            issuer=f"https://securetoken.google.com/{os.environ.get('GOOGLE_PROJECT_ID')}",
-        )
+        try:
+            # Verify and decode token
+            decoded_token = jwt.decode(
+                token,
+                public_key_cert,
+                algorithms=["RS256"],
+                audience=project_id,
+                issuer=f"https://securetoken.google.com/{project_id}",
+            )
+        except Exception as decode_error:
+            logger.error(f"JWT decode error: {str(decode_error)}")
+            logger.error(f"Token preview: {token[:50]}...")
+            logger.error(f"Audience: {project_id}")
+            logger.error(f"Issuer: https://securetoken.google.com/{project_id}")
+            raise
 
         # Extract claims we need (no PII)
         claims = {
