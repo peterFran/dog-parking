@@ -46,13 +46,58 @@ def get_google_public_keys():
         return {}
 
 
+def verify_emulator_token(token: str, project_id: str) -> Optional[Dict[str, Any]]:
+    """Verify Firebase emulator token (no signature verification needed)"""
+    try:
+        logger.info("Verifying Firebase emulator token")
+        
+        # Decode without verification for emulator tokens
+        decoded_token = jwt.decode(
+            token,
+            options={"verify_signature": False},
+            algorithms=["none", "RS256"]  # Emulator can use either
+        )
+        
+        # Validate basic emulator token structure
+        if decoded_token.get("aud") != project_id:
+            logger.error(f"Invalid audience in emulator token: {decoded_token.get('aud')}")
+            return None
+        
+        expected_issuer = f"https://securetoken.google.com/{project_id}"
+        if decoded_token.get("iss") != expected_issuer:
+            logger.error(f"Invalid issuer in emulator token: {decoded_token.get('iss')}")
+            return None
+        
+        # Extract claims we need (no PII)
+        claims = {
+            "user_id": decoded_token.get("sub"),  # User ID
+            "email_verified": decoded_token.get("email_verified", True),  # Emulator users are verified by default
+            "auth_time": decoded_token.get("auth_time"),
+            "iat": decoded_token.get("iat"),
+            "exp": decoded_token.get("exp"),
+            "provider": "emulator",
+        }
+        
+        logger.info(f"Emulator token verified for user: {claims['user_id']}")
+        return claims
+        
+    except Exception as e:
+        logger.error(f"Emulator token verification failed: {str(e)}")
+        return None
+
+
 def verify_firebase_token(token: str) -> Optional[Dict[str, Any]]:
     """Verify Firebase JWT token and extract claims"""
     try:
         project_id = os.environ.get("GOOGLE_PROJECT_ID")
-        logger.info(f"Verifying token for project: {project_id}")
+        environment = os.environ.get("ENVIRONMENT", "dev")
+        logger.info(f"Verifying token for project: {project_id}, environment: {environment}")
         
-        # Get Google's public keys
+        # Handle Firebase emulator tokens in test environment
+        if environment == "test" and project_id == "demo-dog-care":
+            return verify_emulator_token(token, project_id)
+        
+        # Get Google's public keys for production/staging
         public_keys = get_google_public_keys()
 
         if not public_keys:

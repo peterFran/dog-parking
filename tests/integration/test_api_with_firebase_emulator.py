@@ -16,7 +16,7 @@ class FirebaseEmulatorAuth:
     
     def __init__(self):
         self.emulator_host = os.environ.get('FIREBASE_AUTH_EMULATOR_HOST', 'localhost:9099')
-        self.project_id = 'demo-dog-care'
+        self.project_id = os.environ.get('FIREBASE_PROJECT_ID', 'demo-dog-care')
         self.api_key = 'fake-api-key'  # Emulator accepts any API key
     
     def create_test_user(self, email="test@example.com", password="password123", email_verified=True):
@@ -99,16 +99,18 @@ def is_api_available():
     
     try:
         # Try venues endpoint (public)
-        response = requests.get(f"{api_base_url}/venues", timeout=2)
-        return True
-    except requests.exceptions.RequestException:
+        response = requests.get(f"{api_base_url}/venues", timeout=10)
+        return response.status_code in [200, 404]  # 404 is ok, means API is up but no venues
+    except requests.exceptions.RequestException as e:
+        print(f"API availability check failed: {e}")
         return False
 
 
-# Skip all tests if emulator or API is not available
+# Skip all tests if emulator is not available
+# Note: API availability is checked within individual tests to provide better error messages
 pytestmark = pytest.mark.skipif(
-    not is_firebase_emulator_running() or not is_api_available(),
-    reason="Firebase Auth emulator or API not available. Start with: firebase emulators:start --only auth"
+    not is_firebase_emulator_running(),
+    reason="Firebase Auth emulator not available. Start with: firebase emulators:start --only auth"
 )
 
 
@@ -130,6 +132,21 @@ class TestAPIWithFirebaseEmulator:
         cls.firebase_auth = FirebaseEmulatorAuth()
         cls.api_base_url = os.environ.get("API_BASE_URL", "http://127.0.0.1:3000")
         cls.test_data = {}
+        
+        print(f"Testing against API: {cls.api_base_url}")
+        
+        # Check if API is available with retries for ephemeral environments
+        max_retries = 5
+        for attempt in range(max_retries):
+            if is_api_available():
+                break
+            if attempt < max_retries - 1:
+                print(f"API not ready, waiting 10 seconds... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(10)
+            else:
+                pytest.skip(f"API not available at {cls.api_base_url} after {max_retries} attempts")
+        
+        print("API is available, proceeding with tests")
         
         # Create test user
         cls.test_email = f"test_{int(time.time())}@example.com"
