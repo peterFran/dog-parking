@@ -64,12 +64,10 @@ jobs:
         run: |
           echo "Deploying test stack: ${{ env.TEST_STACK_NAME }}"
           
-          # Try using SAM's guided approach which should handle S3 bucket creation
-          echo "🚀 Attempting SAM deployment with guided configuration..."
-          
-          # First, try with a specific bucket name that might already exist
-          # Use a pattern that matches your staging deployments
-          BUCKET_NAME="aws-sam-cli-managed-default-samclisourcebucket-$(echo ${{ env.AWS_REGION }} | tr -d '-')"
+          # Use the same bucket pattern as staging deployment
+          # Based on staging logs: dog-care-sam-deployments-20250713-51
+          BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}"
+          echo "📦 Using S3 bucket: $BUCKET_NAME"
           
           sam deploy \
             --template-file .aws-sam/build/template.yaml \
@@ -80,35 +78,7 @@ jobs:
             --no-fail-on-empty-changeset \
             --no-confirm-changeset \
             --s3-bucket $BUCKET_NAME \
-            --debug || {
-              echo "⚠️  First attempt failed, trying with guided deployment..."
-              
-              # If that fails, try sam deploy without specifying bucket (let SAM manage it)
-              sam deploy \
-                --template-file .aws-sam/build/template.yaml \
-                --stack-name ${{ env.TEST_STACK_NAME }} \
-                --parameter-overrides "Environment=test GoogleProjectId=${{ env.TEST_PROJECT_ID }}" \
-                --capabilities CAPABILITY_IAM \
-                --region ${{ env.AWS_REGION }} \
-                --no-fail-on-empty-changeset \
-                --no-confirm-changeset \
-                --guided \
-                --debug || {
-                  echo "❌ Guided deployment failed, trying resolve-s3..."
-                  
-                  # Last resort: try resolve-s3 (may work if user has the right permissions)
-                  sam deploy \
-                    --template-file .aws-sam/build/template.yaml \
-                    --stack-name ${{ env.TEST_STACK_NAME }} \
-                    --parameter-overrides "Environment=test GoogleProjectId=${{ env.TEST_PROJECT_ID }}" \
-                    --capabilities CAPABILITY_IAM \
-                    --region ${{ env.AWS_REGION }} \
-                    --no-fail-on-empty-changeset \
-                    --no-confirm-changeset \
-                    --resolve-s3 \
-                    --debug
-                }
-            }
+            --debug
       
       - name: Get API endpoint from stack
         id: get-api-url
