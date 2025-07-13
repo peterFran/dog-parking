@@ -49,7 +49,7 @@ s3_prefix = "dog-care-dev"
 [staging]
 [staging.deploy.parameters]
 stack_name = "dog-care-staging"
-parameter_overrides = "Environment=staging GoogleProjectId=dog-parking-465416"
+parameter_overrides = "Environment=staging GoogleProjectId=dog-parking-1fcde"
 s3_prefix = "dog-care-staging"
 
 [prod]
