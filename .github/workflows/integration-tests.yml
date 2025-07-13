@@ -9,7 +9,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  PYTHON_VERSION: '3.13'
+  PYTHON_VERSION: '3.11'
   NODE_VERSION: '18'
 
 jobs:
@@ -57,20 +57,31 @@ jobs:
           pip install -r requirements-dev.txt
       
       - name: Build SAM application
-        run: sam build
+        run: sam build --use-container
       
       - name: Deploy ephemeral test environment
         run: |
           echo "Deploying test stack: ${{ env.TEST_STACK_NAME }}"
+          
+          # Create a unique S3 bucket name for this test run
+          BUCKET_NAME="dog-care-test-deployments-$(date +%Y%m%d)-${{ github.run_id }}"
+          
+          # Create the S3 bucket
+          aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || {
+            echo "⚠️  Bucket creation failed, trying with fallback name..."
+            BUCKET_NAME="dog-care-test-deployments-$(date +%Y%m%d)"
+            aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || true
+          }
+          
           sam deploy \
-            --no-confirm-changeset \
-            --no-fail-on-empty-changeset \
+            --template-file .aws-sam/build/template.yaml \
             --stack-name ${{ env.TEST_STACK_NAME }} \
-            --s3-prefix dog-care-test-${{ github.run_id }} \
             --parameter-overrides "Environment=test GoogleProjectId=${{ env.TEST_PROJECT_ID }}" \
             --capabilities CAPABILITY_IAM \
             --region ${{ env.AWS_REGION }} \
-            --resolve-s3
+            --no-fail-on-empty-changeset \
+            --no-confirm-changeset \
+            --s3-bucket $BUCKET_NAME
       
       - name: Get API endpoint from stack
         id: get-api-url
