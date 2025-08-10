@@ -41,6 +41,35 @@ flake8 functions/ tests/        # Lint code
 mypy functions/                 # Type checking
 ```
 
+**Integration Test Requirements:**
+Integration tests MUST pass before any deployment or feature completion. The platform has two types of integration tests:
+
+1. **Local Integration Tests** (`test_api_integration.py`):
+   - Used for local development with authentication disabled
+   - Runs against `sam local start-api`
+   - Tests basic API functionality without Firebase authentication
+
+2. **CI/CD Integration Tests** (`test_api_with_firebase_emulator.py`):
+   - Used in GitHub Actions with Firebase Auth emulator
+   - Tests complete authentication flow with emulated Firebase
+   - Must pass for all deployments to staging/production
+   - Requires Firebase emulator running on port 9099
+   - Uses test environment configuration (ENVIRONMENT=test)
+
+**Firebase Emulator Setup for Integration Tests:**
+```bash
+# Start Firebase emulator for integration testing
+firebase emulators:start --only auth --project demo-dog-care
+
+# Run integration tests with emulator
+export FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
+export API_BASE_URL=http://127.0.0.1:3000
+export TEST_PROJECT_ID=demo-dog-care
+pytest tests/integration/test_api_with_firebase_emulator.py -v
+```
+
+Integration tests validate end-to-end authentication flows and ensure proper Firebase JWT token verification in all environments.
+
 **Deployment:**
 ```bash
 # Deploy to AWS environment

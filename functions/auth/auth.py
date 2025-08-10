@@ -78,9 +78,18 @@ def verify_emulator_token(token: str, project_id: str) -> Optional[Dict[str, Any
             return None
         
         # Extract claims we need (no PII)
+        # For Firebase emulator, email_verified should come from the token itself
+        email_verified = decoded_token.get("email_verified")
+        if email_verified is None:
+            # If not explicitly set in token, default to True for emulator (for testing convenience)
+            email_verified = True
+            logger.info("Email verification status not found in emulator token, defaulting to True")
+        else:
+            logger.info(f"Email verification status from emulator token: {email_verified}")
+        
         claims = {
             "user_id": decoded_token.get("sub"),  # User ID
-            "email_verified": decoded_token.get("email_verified", True),  # Emulator users are verified by default
+            "email_verified": email_verified,
             "auth_time": decoded_token.get("auth_time"),
             "iat": decoded_token.get("iat"),
             "exp": decoded_token.get("exp"),
