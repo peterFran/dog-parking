@@ -390,38 +390,38 @@ Resources:
   # CloudWatch Log Groups
   DogManagementLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
     Properties:
       LogGroupName: !Sub "/aws/lambda/dog-management-${Environment}-${AWS::StackName}"
       RetentionInDays: 14
-      DeletionPolicy: Delete
 
   OwnerManagementLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
     Properties:
       LogGroupName: !Sub "/aws/lambda/owner-management-${Environment}-${AWS::StackName}"
       RetentionInDays: 14
-      DeletionPolicy: Delete
 
   BookingManagementLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
     Properties:
       LogGroupName: !Sub "/aws/lambda/booking-management-${Environment}-${AWS::StackName}"
       RetentionInDays: 14
-      DeletionPolicy: Delete
 
   VenueManagementLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
     Properties:
       LogGroupName: !Sub "/aws/lambda/venue-management-${Environment}-${AWS::StackName}"
       RetentionInDays: 14
-      DeletionPolicy: Delete
 
   DocsLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
     Properties:
       LogGroupName: !Sub "/aws/lambda/docs-${Environment}-${AWS::StackName}"
       RetentionInDays: 14
-      DeletionPolicy: Delete
 
 
 Outputs:
