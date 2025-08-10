@@ -98,7 +98,7 @@ def list_bookings(table, event):
         from boto3.dynamodb.conditions import Key
 
         response = table.query(
-            IndexName="owner-index",
+            IndexName="owner-time-index",
             KeyConditionExpression=Key("owner_id").eq(owner_id),
             ScanIndexForward=False,  # Sort by start_time descending
         )

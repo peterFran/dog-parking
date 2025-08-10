@@ -29,36 +29,50 @@ echo "📋 Creating tables..."
 
 aws dynamodb create-table \
     --table-name dogs-local \
-    --attribute-definitions AttributeName=id,AttributeType=S AttributeName=owner_id,AttributeType=S \
-    --key-schema AttributeName=id,KeyType=HASH \
-    --global-secondary-indexes IndexName=owner-index,KeySchema=[{AttributeName=owner_id,KeyType=HASH}],Projection={ProjectionType=ALL} \
+    --attribute-definitions \
+        AttributeName=id,AttributeType=S \
+        AttributeName=owner_id,AttributeType=S \
+    --key-schema \
+        AttributeName=id,KeyType=HASH \
+    --global-secondary-indexes \
+        'IndexName=owner-index,KeySchema=[{AttributeName=owner_id,KeyType=HASH}],Projection={ProjectionType=ALL}' \
     --billing-mode PAY_PER_REQUEST \
     --endpoint-url http://localhost:8000 \
     --region us-east-1
 
 aws dynamodb create-table \
     --table-name owners-local \
-    --attribute-definitions AttributeName=id,AttributeType=S AttributeName=email,AttributeType=S \
-    --key-schema AttributeName=id,KeyType=HASH \
-    --global-secondary-indexes IndexName=email-index,KeySchema=[{AttributeName=email,KeyType=HASH}],Projection={ProjectionType=ALL} \
+    --attribute-definitions \
+        AttributeName=user_id,AttributeType=S \
+    --key-schema \
+        AttributeName=user_id,KeyType=HASH \
     --billing-mode PAY_PER_REQUEST \
     --endpoint-url http://localhost:8000 \
     --region us-east-1
 
 aws dynamodb create-table \
     --table-name bookings-local \
-    --attribute-definitions AttributeName=id,AttributeType=S AttributeName=owner_id,AttributeType=S AttributeName=start_time,AttributeType=S \
-    --key-schema AttributeName=id,KeyType=HASH \
-    --global-secondary-indexes IndexName=owner-time-index,KeySchema=[{AttributeName=owner_id,KeyType=HASH},{AttributeName=start_time,KeyType=RANGE}],Projection={ProjectionType=ALL} \
+    --attribute-definitions \
+        AttributeName=id,AttributeType=S \
+        AttributeName=owner_id,AttributeType=S \
+        AttributeName=start_time,AttributeType=S \
+    --key-schema \
+        AttributeName=id,KeyType=HASH \
+    --global-secondary-indexes \
+        'IndexName=owner-time-index,KeySchema=[{AttributeName=owner_id,KeyType=HASH},{AttributeName=start_time,KeyType=RANGE}],Projection={ProjectionType=ALL}' \
     --billing-mode PAY_PER_REQUEST \
     --endpoint-url http://localhost:8000 \
     --region us-east-1
 
 aws dynamodb create-table \
     --table-name payments-local \
-    --attribute-definitions AttributeName=id,AttributeType=S AttributeName=booking_id,AttributeType=S \
-    --key-schema AttributeName=id,KeyType=HASH \
-    --global-secondary-indexes IndexName=booking-index,KeySchema=[{AttributeName=booking_id,KeyType=HASH}],Projection={ProjectionType=ALL} \
+    --attribute-definitions \
+        AttributeName=id,AttributeType=S \
+        AttributeName=booking_id,AttributeType=S \
+    --key-schema \
+        AttributeName=id,KeyType=HASH \
+    --global-secondary-indexes \
+        'IndexName=booking-index,KeySchema=[{AttributeName=booking_id,KeyType=HASH}],Projection={ProjectionType=ALL}' \
     --billing-mode PAY_PER_REQUEST \
     --endpoint-url http://localhost:8000 \
     --region us-east-1
