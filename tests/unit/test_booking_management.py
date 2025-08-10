@@ -330,11 +330,15 @@ def test_list_bookings():
         AttributeDefinitions=[
             {"AttributeName": "id", "AttributeType": "S"},
             {"AttributeName": "owner_id", "AttributeType": "S"},
+            {"AttributeName": "start_time", "AttributeType": "S"},
         ],
         GlobalSecondaryIndexes=[
             {
-                "IndexName": "owner-index",
-                "KeySchema": [{"AttributeName": "owner_id", "KeyType": "HASH"}],
+                "IndexName": "owner-time-index",
+                "KeySchema": [
+                    {"AttributeName": "owner_id", "KeyType": "HASH"},
+                    {"AttributeName": "start_time", "KeyType": "RANGE"},
+                ],
                 "Projection": {"ProjectionType": "ALL"},
             }
         ],
