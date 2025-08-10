@@ -2,10 +2,10 @@ name: Deploy to Staging Environment
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
-    types: [ closed ]
+    branches: [main]
+    types: [closed]
 
 env:
   AWS_REGION: us-east-1
@@ -16,304 +16,213 @@ jobs:
   test:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        
-    - name: Create virtual environment
-      run: |
-        python -m venv venv
-        source venv/bin/activate
-        python -m pip install --upgrade pip
-        
-    - name: Install dependencies
-      run: |
-        source venv/bin/activate
-        pip install -r requirements-dev.txt
-        
-    - name: Run tests
-      run: |
-        source venv/bin/activate
-        pytest tests/unit/ --cov=functions --cov-report=xml --cov-fail-under=75
-        
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Create virtual environment
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          python -m pip install --upgrade pip
+
+      - name: Install dependencies
+        run: |
+          source venv/bin/activate
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          source venv/bin/activate
+          pytest tests/unit/ --cov=functions --cov-report=xml --cov-fail-under=75
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
 
   deploy:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     environment: staging
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        
-    - name: Setup AWS SAM CLI
-      uses: aws-actions/setup-sam@v2
-      with:
-        use-installer: true
-        
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-        
-    - name: Validate SAM template
-      run: sam validate --template ${{ env.SAM_TEMPLATE }}
-      
-    - name: Build SAM application
-      run: sam build --template ${{ env.SAM_TEMPLATE }} --use-container
-      
-    - name: Deploy to Staging
-      run: |
-        echo "🚀 Starting SAM deployment..."
-        
-        # Function to attempt deployment
-        deploy_sam() {
-          local bucket_name=$1
-          echo "📦 Using S3 bucket: $bucket_name"
-          
-          sam deploy \
-            --template-file .aws-sam/build/template.yaml \
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Setup AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Validate SAM template
+        run: sam validate --template ${{ env.SAM_TEMPLATE }}
+
+      - name: Build SAM application
+        run: sam build --template ${{ env.SAM_TEMPLATE }} --use-container
+
+      - name: Deploy to Staging
+        run: |
+          echo "🚀 Starting SAM deployment..."
+
+          # Function to attempt deployment
+          deploy_sam() {
+            local bucket_name=$1
+            echo "📦 Using S3 bucket: $bucket_name"
+            
+            sam deploy \
+              --template-file .aws-sam/build/template.yaml \
+              --stack-name ${{ env.STACK_NAME }} \
+              --parameter-overrides Environment=staging \
+              --capabilities CAPABILITY_IAM \
+              --region ${{ env.AWS_REGION }} \
+              --no-fail-on-empty-changeset \
+              --no-confirm-changeset \
+              --s3-bucket $bucket_name \
+              --debug
+          }
+
+          # Create a unique S3 bucket name
+          BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}"
+
+          # Create the S3 bucket
+          aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || {
+            echo "⚠️  Bucket creation failed, trying with existing bucket..."
+            BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)"
+          }
+
+          # First deployment attempt
+          echo "🎯 First deployment attempt..."
+          if deploy_sam $BUCKET_NAME; then
+            echo "✅ Deployment succeeded on first attempt!"
+            exit 0
+          fi
+
+          echo "⚠️  First deployment failed, checking for recoverable issues..."
+
+          # Check if the main stack is in ROLLBACK_COMPLETE state
+          MAIN_STACK_STATUS=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --region ${{ env.AWS_REGION }} --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+
+          if [ "$MAIN_STACK_STATUS" = "ROLLBACK_COMPLETE" ]; then
+            echo "🗑️  Main stack is in ROLLBACK_COMPLETE state, deleting it..."
+            aws cloudformation delete-stack --stack-name ${{ env.STACK_NAME }} --region ${{ env.AWS_REGION }}
+            
+            echo "⏳ Waiting for main stack deletion..."
+            aws cloudformation wait stack-delete-complete --stack-name ${{ env.STACK_NAME }} --region ${{ env.AWS_REGION }}
+            
+            echo "🔄 Retrying SAM deployment after main stack deletion..."
+            
+            # Create a unique S3 bucket name for retry
+            RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}-retry"
+            aws s3 mb s3://$RETRY_BUCKET_NAME --region ${{ env.AWS_REGION }} || {
+              echo "⚠️  Retry bucket creation failed, using fallback name..."
+              RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-retry"
+            }
+            
+            if deploy_sam $RETRY_BUCKET_NAME; then
+              echo "✅ Deployment succeeded on retry after stack deletion!"
+              exit 0
+            else
+              echo "❌ Deployment failed even after stack deletion"
+              exit 1
+            fi
+            
+          # Check if the error is related to aws-sam-cli-managed-default
+          elif aws cloudformation describe-stacks --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }} --query 'Stacks[0].StackStatus' --output text 2>/dev/null | grep -q "REVIEW_IN_PROGRESS"; then
+            echo "🗑️  Found corrupted SAM managed stack, deleting it..."
+            aws cloudformation delete-stack --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }}
+            
+            echo "⏳ Waiting for SAM managed stack deletion..."
+            aws cloudformation wait stack-delete-complete --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }}
+            
+            echo "🔄 Retrying SAM deployment after SAM managed stack deletion..."
+            
+            # Create a unique S3 bucket name for retry
+            RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}-retry2"
+            aws s3 mb s3://$RETRY_BUCKET_NAME --region ${{ env.AWS_REGION }} || {
+              echo "⚠️  Retry bucket creation failed, using fallback name..."
+              RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-retry2"
+            }
+            
+            if deploy_sam $RETRY_BUCKET_NAME; then
+              echo "✅ Deployment succeeded on retry after SAM managed stack deletion!"
+              exit 0
+            else
+              echo "❌ Deployment failed even after SAM managed stack deletion"
+              exit 1
+            fi
+          else
+            echo "❌ Deployment failed with unrecoverable error"
+            echo "Main stack status: $MAIN_STACK_STATUS"
+            exit 1
+          fi
+
+      - name: Debug CloudFormation Stack on Failure
+        if: failure()
+        run: |
+          echo "🔍 Deployment failed, checking CloudFormation stack events..."
+          aws cloudformation describe-stack-events \
             --stack-name ${{ env.STACK_NAME }} \
-            --parameter-overrides Environment=staging \
-            --capabilities CAPABILITY_IAM \
             --region ${{ env.AWS_REGION }} \
-            --no-fail-on-empty-changeset \
-            --no-confirm-changeset \
-            --s3-bucket $bucket_name \
-            --debug
-        }
-        
-        # Create a unique S3 bucket name
-        BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}"
-        
-        # Create the S3 bucket
-        aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || {
-          echo "⚠️  Bucket creation failed, trying with existing bucket..."
-          BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)"
-        }
-        
-        # First deployment attempt
-        echo "🎯 First deployment attempt..."
-        if deploy_sam $BUCKET_NAME; then
-          echo "✅ Deployment succeeded on first attempt!"
-          exit 0
-        fi
-        
-        echo "⚠️  First deployment failed, checking for recoverable issues..."
-        
-        # Check if the main stack is in ROLLBACK_COMPLETE state
-        MAIN_STACK_STATUS=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --region ${{ env.AWS_REGION }} --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
-        
-        if [ "$MAIN_STACK_STATUS" = "ROLLBACK_COMPLETE" ]; then
-          echo "🗑️  Main stack is in ROLLBACK_COMPLETE state, deleting it..."
-          aws cloudformation delete-stack --stack-name ${{ env.STACK_NAME }} --region ${{ env.AWS_REGION }}
-          
-          echo "⏳ Waiting for main stack deletion..."
-          aws cloudformation wait stack-delete-complete --stack-name ${{ env.STACK_NAME }} --region ${{ env.AWS_REGION }}
-          
-          echo "🔄 Retrying SAM deployment after main stack deletion..."
-          
-          # Create a unique S3 bucket name for retry
-          RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}-retry"
-          aws s3 mb s3://$RETRY_BUCKET_NAME --region ${{ env.AWS_REGION }} || {
-            echo "⚠️  Retry bucket creation failed, using fallback name..."
-            RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-retry"
-          }
-          
-          if deploy_sam $RETRY_BUCKET_NAME; then
-            echo "✅ Deployment succeeded on retry after stack deletion!"
-            exit 0
+            --query 'StackEvents[?ResourceStatus==`CREATE_FAILED` || ResourceStatus==`UPDATE_FAILED`]' \
+            --output table || true
+
+          echo "🔍 Checking stack status..."
+          aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].{Status:StackStatus,Reason:StackStatusReason}' \
+            --output table || true
+
+      - name: Get API Gateway URL
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`DogCareApiUrl`].OutputValue' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          echo "🚀 Staging API deployed at: $API_URL"
+          echo "API_URL=$API_URL" >> $GITHUB_ENV
+
+      - name: Notify Slack (optional)
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Staging deployment successful!"
+            # Add Slack webhook here if needed
           else
-            echo "❌ Deployment failed even after stack deletion"
-            exit 1
+            echo "❌ Staging deployment failed!"
+            # Add Slack webhook here if needed
           fi
-          
-        # Check if the error is related to aws-sam-cli-managed-default
-        elif aws cloudformation describe-stacks --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }} --query 'Stacks[0].StackStatus' --output text 2>/dev/null | grep -q "REVIEW_IN_PROGRESS"; then
-          echo "🗑️  Found corrupted SAM managed stack, deleting it..."
-          aws cloudformation delete-stack --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }}
-          
-          echo "⏳ Waiting for SAM managed stack deletion..."
-          aws cloudformation wait stack-delete-complete --stack-name aws-sam-cli-managed-default --region ${{ env.AWS_REGION }}
-          
-          echo "🔄 Retrying SAM deployment after SAM managed stack deletion..."
-          
-          # Create a unique S3 bucket name for retry
-          RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}-retry2"
-          aws s3 mb s3://$RETRY_BUCKET_NAME --region ${{ env.AWS_REGION }} || {
-            echo "⚠️  Retry bucket creation failed, using fallback name..."
-            RETRY_BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-retry2"
-          }
-          
-          if deploy_sam $RETRY_BUCKET_NAME; then
-            echo "✅ Deployment succeeded on retry after SAM managed stack deletion!"
-            exit 0
-          else
-            echo "❌ Deployment failed even after SAM managed stack deletion"
-            exit 1
-          fi
-        else
-          echo "❌ Deployment failed with unrecoverable error"
-          echo "Main stack status: $MAIN_STACK_STATUS"
-          exit 1
-        fi
-          
-    - name: Debug CloudFormation Stack on Failure
-      if: failure()
-      run: |
-        echo "🔍 Deployment failed, checking CloudFormation stack events..."
-        aws cloudformation describe-stack-events \
-          --stack-name ${{ env.STACK_NAME }} \
-          --region ${{ env.AWS_REGION }} \
-          --query 'StackEvents[?ResourceStatus==`CREATE_FAILED` || ResourceStatus==`UPDATE_FAILED`]' \
-          --output table || true
-        
-        echo "🔍 Checking stack status..."
-        aws cloudformation describe-stacks \
-          --stack-name ${{ env.STACK_NAME }} \
-          --region ${{ env.AWS_REGION }} \
-          --query 'Stacks[0].{Status:StackStatus,Reason:StackStatusReason}' \
-          --output table || true
-          
-    - name: Get API Gateway URL
-      run: |
-        API_URL=$(aws cloudformation describe-stacks \
-          --stack-name ${{ env.STACK_NAME }} \
-          --query 'Stacks[0].Outputs[?OutputKey==`DogCareApiUrl`].OutputValue' \
-          --output text \
-          --region ${{ env.AWS_REGION }})
-        echo "🚀 Staging API deployed at: $API_URL"
-        echo "API_URL=$API_URL" >> $GITHUB_ENV
-        
-    - name: Run integration tests
-      run: |
-        echo "🧪 Running integration tests against Staging environment..."
-        
-        # Test complete workflow
-        echo "Testing owner registration..."
-        
-        # Use unique email for each test run to avoid duplicates
-        UNIQUE_EMAIL="staging-test-$(date +%s)-${{ github.run_number }}@example.com"
-        echo "Using unique email: $UNIQUE_EMAIL"
-        
-        OWNER_RESPONSE=$(curl -s -X POST "$API_URL/owners/register" \
-          -H "Content-Type: application/json" \
-          -d "{\"name\":\"Test User\",\"email\":\"$UNIQUE_EMAIL\",\"phone\":\"+1234567890\"}")
-        
-        echo "Owner registration response:"
-        echo "$OWNER_RESPONSE"
-        
-        OWNER_ID=$(echo "$OWNER_RESPONSE" | jq -r '.id')
-        echo "Owner ID: $OWNER_ID"
-        
-        if [ -z "$OWNER_ID" ]; then
-          echo "❌ Owner registration failed"
-          echo "Full response was: $OWNER_RESPONSE"
-          exit 1
-        fi
-        
-        echo "Testing venue creation..."
-        VENUE_RESPONSE=$(curl -s -X POST "$API_URL/venues" \
-          -H "Content-Type: application/json" \
-          -d "{\"name\":\"Test Venue\",\"address\":{\"street\":\"123 Test St\",\"city\":\"Test City\",\"state\":\"TS\",\"zip\":\"12345\"},\"capacity\":20,\"operating_hours\":{\"monday\":{\"open\":true,\"start\":\"08:00\",\"end\":\"18:00\"},\"tuesday\":{\"open\":true,\"start\":\"08:00\",\"end\":\"18:00\"},\"wednesday\":{\"open\":true,\"start\":\"08:00\",\"end\":\"18:00\"},\"thursday\":{\"open\":true,\"start\":\"08:00\",\"end\":\"18:00\"},\"friday\":{\"open\":true,\"start\":\"08:00\",\"end\":\"18:00\"},\"saturday\":{\"open\":true,\"start\":\"09:00\",\"end\":\"17:00\"},\"sunday\":{\"open\":false}},\"services\":[\"daycare\",\"boarding\"],\"slot_duration\":60}")
-        
-        echo "Venue creation response:"
-        echo "$VENUE_RESPONSE"
-        
-        VENUE_ID=$(echo "$VENUE_RESPONSE" | jq -r '.id')
-        echo "Venue ID: $VENUE_ID"
-        
-        if [ -z "$VENUE_ID" ] || [ "$VENUE_ID" = "null" ]; then
-          echo "❌ Venue creation failed"
-          echo "Full response was: $VENUE_RESPONSE"
-          exit 1
-        fi
-        
-        echo "Testing dog registration..."
-        DOG_RESPONSE=$(curl -s -X POST "$API_URL/dogs" \
-          -H "Content-Type: application/json" \
-          -d "{\"name\":\"Test Dog\",\"breed\":\"Labrador\",\"age\":2,\"size\":\"medium\",\"owner_id\":\"$OWNER_ID\"}")
-        
-        DOG_ID=$(echo "$DOG_RESPONSE" | jq -r '.id')
-        echo "Dog ID: $DOG_ID"
-        
-        if [ -z "$DOG_ID" ]; then
-          echo "❌ Dog registration failed"
-          exit 1
-        fi
-        
-        echo "Testing booking creation..."
-        BOOKING_RESPONSE=$(curl -s -X POST "$API_URL/bookings" \
-          -H "Content-Type: application/json" \
-          -d "{\"dog_id\":\"$DOG_ID\",\"owner_id\":\"$OWNER_ID\",\"venue_id\":\"$VENUE_ID\",\"service_type\":\"daycare\",\"start_time\":\"2024-12-02T09:00:00Z\",\"end_time\":\"2024-12-02T17:00:00Z\"}")
-        
-        echo "Booking creation response:"
-        echo "$BOOKING_RESPONSE"
-        
-        BOOKING_ID=$(echo "$BOOKING_RESPONSE" | jq -r '.id')
-        echo "Booking ID: $BOOKING_ID"
-        
-        if [ -z "$BOOKING_ID" ] || [ "$BOOKING_ID" = "null" ]; then
-          echo "❌ Booking creation failed"
-          echo "Full response was: $BOOKING_RESPONSE"
-          exit 1
-        fi
-        
-        echo "Testing venue slots retrieval..."
-        SLOTS_RESPONSE=$(curl -s -X GET "$API_URL/venues/$VENUE_ID/slots?date=2024-12-02" \
-          -H "Content-Type: application/json")
-        
-        echo "Slots response:"
-        echo "$SLOTS_RESPONSE"
-        
-        # Check if slots response contains expected data
-        if [[ "$SLOTS_RESPONSE" == *"slots"* ]]; then
-          echo "✅ Venue slots retrieval successful"
-        else
-          echo "❌ Venue slots retrieval failed"
-          exit 1
-        fi
-        
-        echo "✅ All integration tests passed!"
-        
-    - name: Notify Slack (optional)
-      if: always()
-      run: |
-        if [ "${{ job.status }}" == "success" ]; then
-          echo "✅ Staging deployment successful!"
-          # Add Slack webhook here if needed
-        else
-          echo "❌ Staging deployment failed!"
-          # Add Slack webhook here if needed
-        fi
-        
-    - name: Deployment Summary
-      run: |
-        echo "## 🎉 Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
-        echo "- **Environment:** Staging" >> $GITHUB_STEP_SUMMARY
-        echo "- **Stack Name:** ${{ env.STACK_NAME }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **API URL:** ${{ env.API_URL }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Tests:** ✅ Passed" >> $GITHUB_STEP_SUMMARY
-        echo "- **Release:** staging-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Deployment Summary
+        run: |
+          echo "## 🎉 Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** Staging" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stack Name:** ${{ env.STACK_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **API URL:** ${{ env.API_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tests:** ✅ Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release:** staging-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
