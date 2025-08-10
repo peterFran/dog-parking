@@ -4,9 +4,9 @@ import { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dog } from 'lucide-react';
+// import { Button } from '@/components/ui/button'; // Not needed with inline styles
+// import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Not needed with inline styles
+// import { Dog } from 'lucide-react'; // Using emoji instead
 import { AuthError } from 'firebase/auth';
 import { useRegisterOwner } from '@/hooks/useApi';
 
@@ -69,9 +69,23 @@ export default function RegisterPage(): JSX.Element {
         },
       };
 
-      await registerOwnerMutation.mutateAsync(defaultOwnerData);
+      try {
+        await registerOwnerMutation.mutateAsync(defaultOwnerData);
+      } catch (backendError) {
+        // If backend registration fails but Firebase auth succeeded, 
+        // still consider it a partial success and redirect
+        console.warn('Backend registration failed but Firebase auth succeeded:', backendError);
+        setAuthState({ 
+          status: 'success', 
+          error: null, 
+          step: 'complete' 
+        });
+        // Show a message that they're logged in but profile setup may be incomplete
+        router.push('/dashboard?setup=incomplete');
+        return;
+      }
       
-      // Step 3: Success
+      // Step 3: Full Success
       setAuthState({ status: 'success', error: null, step: 'complete' });
       
       // Navigate to dashboard after successful registration
@@ -136,167 +150,331 @@ export default function RegisterPage(): JSX.Element {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8" style={{
+      background: 'linear-gradient(135deg, #fce7f3 0%, #f3e8ff 50%, #fed7aa 100%)',
+      fontFamily: 'system-ui, -apple-system, sans-serif'
+    }}>
       <div className="max-w-md w-full space-y-8">
         {/* Logo and Header */}
         <header className="text-center">
-          <div className="flex justify-center mb-6">
-            <Dog className="h-12 w-12 text-blue-600" aria-hidden="true" />
+          <div className="flex justify-center mb-6" style={{ 
+            fontSize: '4rem',
+            animation: 'wiggle 2s ease-in-out infinite'
+          }}>
+            🐕
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Join Dog Parking
+          <h1 style={{
+            fontSize: '3rem',
+            fontWeight: '900',
+            marginBottom: '1rem',
+            background: 'linear-gradient(45deg, #f59e0b, #ef4444, #ec4899, #8b5cf6)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text'
+          }}>
+            🎾 Join the Pack! 🎾
           </h1>
-          <p className="text-sm text-gray-600">
-            Create your account with Google to get started
+          <p style={{ 
+            fontSize: '1.25rem',
+            color: '#6b7280',
+            marginBottom: '2rem',
+            fontWeight: '500'
+          }}>
+            Ready for pawsome adventures? Let's get you started! 🚀
           </p>
         </header>
 
         {/* Registration Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Create Account</CardTitle>
-            <CardDescription>
-              Sign up with your Google account to access premium dog care services
-            </CardDescription>
-          </CardHeader>
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '1.5rem',
+          padding: '2rem',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+          border: '4px solid #fbbf24'
+        }}>
+          <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+            <h2 style={{
+              fontSize: '2rem',
+              fontWeight: 'bold',
+              color: '#1f2937',
+              marginBottom: '0.5rem'
+            }}>
+              Create Your Account 🎉
+            </h2>
+            <p style={{ color: '#6b7280', fontSize: '1rem' }}>
+              One click with Google = instant access to premium dog care! ✨
+            </p>
+          </div>
           
-          <CardContent>
+          <div>
             {/* Progress Indicator */}
             {isLoading && (
-              <div className="mb-6 p-4 bg-blue-50 rounded-md">
-                <div className="flex items-center space-x-3">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                  <span className="text-sm text-blue-700 font-medium">
-                    {getStepDescription()}
+              <div style={{
+                marginBottom: '1.5rem',
+                padding: '1rem',
+                background: 'linear-gradient(135deg, #fef3c7, #fbbf24)',
+                borderRadius: '1rem',
+                border: '2px solid #fbbf24'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{
+                    width: '20px',
+                    height: '20px',
+                    border: '2px solid #d97706',
+                    borderTop: '2px solid transparent',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }}></div>
+                  <span style={{ 
+                    fontSize: '0.875rem',
+                    color: '#92400e',
+                    fontWeight: '600'
+                  }}>
+                    🐕 {getStepDescription()}
                   </span>
                 </div>
-                <div className="mt-2 w-full bg-blue-200 rounded-full h-2">
-                  <div 
-                    className={`bg-blue-600 h-2 rounded-full transition-all duration-500 ${
-                      authState.step === 'auth' ? 'w-1/3' :
-                      authState.step === 'registration' ? 'w-2/3' :
-                      'w-full'
-                    }`}
-                  ></div>
+                <div style={{
+                  marginTop: '0.5rem',
+                  width: '100%',
+                  backgroundColor: '#fbbf24',
+                  borderRadius: '9999px',
+                  height: '8px'
+                }}>
+                  <div style={{
+                    backgroundColor: '#d97706',
+                    height: '8px',
+                    borderRadius: '9999px',
+                    transition: 'all 0.5s',
+                    width: authState.step === 'auth' ? '33%' :
+                           authState.step === 'registration' ? '67%' : '100%'
+                  }}></div>
                 </div>
               </div>
             )}
 
             {/* Error Display */}
             {hasError && authState.error && (
-              <div 
-                className="rounded-md bg-red-50 p-4 mb-6" 
-                role="alert"
-                aria-live="polite"
-              >
-                <div className="text-sm text-red-700">
-                  {authState.error}
+              <div style={{
+                borderRadius: '1rem',
+                background: 'linear-gradient(135deg, #fef2f2, #fee2e2)',
+                padding: '1rem',
+                marginBottom: '1.5rem',
+                border: '2px solid #fecaca'
+              }} role="alert" aria-live="polite">
+                <div style={{ 
+                  fontSize: '0.875rem', 
+                  color: '#dc2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  😟 {authState.error}
                 </div>
               </div>
             )}
 
             {/* Google Sign-In Button */}
-            <Button
+            <button
               onClick={handleGoogleSignIn}
               disabled={isLoading}
-              className="w-full h-12 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                width: '100%',
+                height: '3.5rem',
+                backgroundColor: 'white',
+                border: '3px solid #e5e7eb',
+                borderRadius: '1rem',
+                color: '#374151',
+                fontSize: '1.1rem',
+                fontWeight: '600',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                opacity: isLoading ? 0.5 : 1,
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.75rem'
+              }}
+              onMouseOver={(e) => {
+                if (!isLoading) {
+                  e.currentTarget.style.backgroundColor = '#f9fafb';
+                  e.currentTarget.style.borderColor = '#d1d5db';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (!isLoading) {
+                  e.currentTarget.style.backgroundColor = 'white';
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }
+              }}
               aria-describedby={hasError ? 'auth-error' : undefined}
             >
-              <div className="flex items-center justify-center space-x-3">
-                {isLoading ? (
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600" />
-                ) : (
-                  <svg
-                    className="h-5 w-5"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                    />
-                  </svg>
-                )}
-                <span className="font-medium">
-                  {getLoadingText()}
-                </span>
-              </div>
-            </Button>
+              {isLoading ? (
+                <div style={{
+                  width: '20px',
+                  height: '20px',
+                  border: '2px solid #3b82f6',
+                  borderTop: '2px solid transparent',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }} />
+              ) : (
+                <svg
+                  style={{ height: '20px', width: '20px' }}
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  />
+                </svg>
+              )}
+              <span>
+                {getLoadingText()}
+              </span>
+            </button>
 
             {/* Benefits Section */}
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">
-                What you'll get:
+            <div style={{
+              marginTop: '1.5rem',
+              paddingTop: '1.5rem',
+              borderTop: '2px solid #f3f4f6'
+            }}>
+              <h3 style={{
+                fontSize: '1.125rem',
+                fontWeight: 'bold',
+                color: '#1f2937',
+                marginBottom: '1rem',
+                textAlign: 'center'
+              }}>
+                🎉 What pawsome perks await you:
               </h3>
-              <ul className="space-y-2 text-sm text-gray-600">
-                <li className="flex items-center">
-                  <svg className="h-4 w-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  Access to premium dog care venues
-                </li>
-                <li className="flex items-center">
-                  <svg className="h-4 w-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  Easy booking and scheduling
-                </li>
-                <li className="flex items-center">
-                  <svg className="h-4 w-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  Manage multiple dog profiles
-                </li>
-                <li className="flex items-center">
-                  <svg className="h-4 w-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  Real-time booking updates
-                </li>
-              </ul>
+              <div style={{
+                display: 'grid',
+                gap: '0.75rem'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '0.75rem',
+                  backgroundColor: '#fef3c7',
+                  borderRadius: '0.75rem',
+                  border: '2px solid #fbbf24'
+                }}>
+                  <span style={{ fontSize: '1.25rem', marginRight: '0.75rem' }}>🏆</span>
+                  <span style={{ color: '#92400e', fontWeight: '500' }}>
+                    Premium venues with top-notch care
+                  </span>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '0.75rem',
+                  backgroundColor: '#fce7f3',
+                  borderRadius: '0.75rem',
+                  border: '2px solid #ec4899'
+                }}>
+                  <span style={{ fontSize: '1.25rem', marginRight: '0.75rem' }}>📅</span>
+                  <span style={{ color: '#9d174d', fontWeight: '500' }}>
+                    Super easy booking (like, really easy!)
+                  </span>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '0.75rem',
+                  backgroundColor: '#f3e8ff',
+                  borderRadius: '0.75rem',
+                  border: '2px solid #a855f7'
+                }}>
+                  <span style={{ fontSize: '1.25rem', marginRight: '0.75rem' }}>🐕‍🦺</span>
+                  <span style={{ color: '#6b21a8', fontWeight: '500' }}>
+                    Manage all your furry friends
+                  </span>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '0.75rem',
+                  backgroundColor: '#fed7aa',
+                  borderRadius: '0.75rem',
+                  border: '2px solid #f97316'
+                }}>
+                  <span style={{ fontSize: '1.25rem', marginRight: '0.75rem' }}>📱</span>
+                  <span style={{ color: '#9a3412', fontWeight: '500' }}>
+                    Live updates and adorable photos!
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Sign-In Link */}
-            <div className="mt-6 text-center">
-              <p className="text-sm text-gray-600">
-                Already have an account?{' '}
+            <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+              <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                Already part of the pack?{' '}
                 <Link 
                   href="/auth/login" 
-                  className="font-medium text-blue-600 hover:text-blue-500 focus:outline-none focus:underline transition-colors"
+                  style={{
+                    fontWeight: '600',
+                    color: '#7c3aed',
+                    textDecoration: 'none'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                  onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
                 >
-                  Sign in
+                  Sign in here! 🐾
                 </Link>
               </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Terms and Privacy */}
-        <footer className="text-center">
-          <p className="text-xs text-gray-500">
+        <footer style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
             By continuing, you agree to our{' '}
-            <Link href="/terms" className="text-blue-600 hover:text-blue-500">
+            <Link href="/terms" style={{ color: '#7c3aed', textDecoration: 'none' }}
+              onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
+              onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}>
               Terms of Service
             </Link>{' '}
             and{' '}
-            <Link href="/privacy" className="text-blue-600 hover:text-blue-500">
+            <Link href="/privacy" style={{ color: '#7c3aed', textDecoration: 'none' }}
+              onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
+              onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}>
               Privacy Policy
             </Link>
           </p>
         </footer>
       </div>
+      
+      <style jsx>{`
+        @keyframes wiggle {
+          0% { transform: rotate(-3deg); }
+          50% { transform: rotate(3deg); }
+          100% { transform: rotate(-3deg); }
+        }
+        
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }

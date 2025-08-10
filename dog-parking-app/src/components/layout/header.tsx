@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Dog, Menu, User, LogOut } from 'lucide-react';
+// import { Button } from '@/components/ui/button'; // Using inline styles instead
+// import { Dog, Menu, User, LogOut } from 'lucide-react'; // Using emojis instead
 import { useState } from 'react';
 
 export function Header() {
@@ -19,140 +19,405 @@ export function Header() {
   };
 
   return (
-    <header className="bg-white shadow-sm border-b sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
+    <header style={{
+      backgroundColor: 'white',
+      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+      borderBottom: '4px solid #fbbf24',
+      position: 'sticky',
+      top: 0,
+      zIndex: 50
+    }}>
+      <div style={{
+        maxWidth: '80rem',
+        margin: '0 auto',
+        padding: '0 2rem'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          height: '4rem'
+        }}>
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
-            <Dog className="h-8 w-8 text-blue-600" />
-            <span className="text-xl font-bold text-gray-900">Dog Parking</span>
+          <Link href="/" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            textDecoration: 'none'
+          }}>
+            <span style={{ fontSize: '2rem' }}>🐕</span>
+            <span style={{
+              fontSize: '1.5rem',
+              fontWeight: 'bold',
+              background: 'linear-gradient(45deg, #f59e0b, #ef4444, #ec4899, #8b5cf6)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text'
+            }}>
+              Dog Parking
+            </span>
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
-            <Link href="/venues" className="text-gray-600 hover:text-gray-900">
-              Find Venues
+          <nav style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '2rem'
+          }}>
+            <Link href="/venues" style={{
+              color: '#6b7280',
+              textDecoration: 'none',
+              fontWeight: '600',
+              padding: '0.5rem 1rem',
+              borderRadius: '0.5rem',
+              transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = '#fef3c7';
+              e.currentTarget.style.color = '#92400e';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = '#6b7280';
+            }}>
+              🏠 Find Venues
             </Link>
             {user && (
               <>
-                <Link href="/dashboard" className="text-gray-600 hover:text-gray-900">
-                  Dashboard
+                <Link href="/dashboard" style={{
+                  color: '#6b7280',
+                  textDecoration: 'none',
+                  fontWeight: '600',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.5rem',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fce7f3';
+                  e.currentTarget.style.color = '#9d174d';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#6b7280';
+                }}>
+                  📊 Dashboard
                 </Link>
-                <Link href="/dogs" className="text-gray-600 hover:text-gray-900">
-                  My Dogs
+                <Link href="/dogs" style={{
+                  color: '#6b7280',
+                  textDecoration: 'none',
+                  fontWeight: '600',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.5rem',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f3e8ff';
+                  e.currentTarget.style.color = '#6b21a8';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#6b7280';
+                }}>
+                  🐶 My Dogs
                 </Link>
-                <Link href="/bookings" className="text-gray-600 hover:text-gray-900">
-                  Bookings
+                <Link href="/bookings" style={{
+                  color: '#6b7280',
+                  textDecoration: 'none',
+                  fontWeight: '600',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.5rem',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fed7aa';
+                  e.currentTarget.style.color = '#9a3412';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#6b7280';
+                }}>
+                  📅 Bookings
                 </Link>
               </>
             )}
           </nav>
 
           {/* Auth Actions */}
-          <div className="hidden md:flex items-center space-x-4">
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem'
+          }}>
             {user ? (
-              <div className="flex items-center space-x-4">
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem'
+              }}>
                 <Link href="/profile">
-                  <Button variant="ghost" size="sm">
-                    <User className="h-4 w-4 mr-2" />
-                    Profile
-                  </Button>
+                  <button style={{
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    color: '#6b7280',
+                    cursor: 'pointer',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '0.5rem',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f3e8ff';
+                    e.currentTarget.style.color = '#6b21a8';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = '#6b7280';
+                  }}>
+                    👤 Profile
+                  </button>
                 </Link>
-                <Button variant="ghost" size="sm" onClick={handleSignOut}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sign Out
-                </Button>
+                <button onClick={handleSignOut} style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  color: '#6b7280',
+                  cursor: 'pointer',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.5rem',
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fee2e2';
+                  e.currentTarget.style.color = '#dc2626';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#6b7280';
+                }}>
+                  👋 Sign Out
+                </button>
               </div>
             ) : (
-              <div className="flex items-center space-x-4">
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem'
+              }}>
                 <Link href="/auth/login">
-                  <Button variant="ghost">Sign In</Button>
+                  <button style={{
+                    backgroundColor: 'transparent',
+                    border: '2px solid #e5e7eb',
+                    color: '#6b7280',
+                    cursor: 'pointer',
+                    padding: '0.5rem 1.5rem',
+                    borderRadius: '0.75rem',
+                    fontWeight: '600',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f9fafb';
+                    e.currentTarget.style.borderColor = '#d1d5db';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.borderColor = '#e5e7eb';
+                  }}>
+                    Sign In
+                  </button>
                 </Link>
                 <Link href="/auth/register">
-                  <Button>Get Started</Button>
+                  <button style={{
+                    background: 'linear-gradient(45deg, #ec4899, #8b5cf6)',
+                    border: 'none',
+                    color: 'white',
+                    cursor: 'pointer',
+                    padding: '0.5rem 1.5rem',
+                    borderRadius: '0.75rem',
+                    fontWeight: '600',
+                    boxShadow: '0 4px 14px 0 rgba(0, 0, 0, 0.2)',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 25px 0 rgba(0, 0, 0, 0.3)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 14px 0 rgba(0, 0, 0, 0.2)';
+                  }}>
+                    🚀 Get Started
+                  </button>
                 </Link>
               </div>
             )}
           </div>
 
           {/* Mobile menu button */}
-          <div className="md:hidden">
-            <Button
-              variant="ghost"
-              size="sm"
+          <div style={{
+            display: mobileMenuOpen ? 'block' : 'none'
+          }}>
+            <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              style={{
+                backgroundColor: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '1.5rem'
+              }}
             >
-              <Menu className="h-6 w-6" />
-            </Button>
+              {mobileMenuOpen ? '❌' : '☰'}
+            </button>
           </div>
         </div>
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-gray-200 py-4">
-            <div className="space-y-2">
+          <div style={{
+            borderTop: '2px solid #fbbf24',
+            paddingTop: '1rem',
+            paddingBottom: '1rem'
+          }}>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem'
+            }}>
               <Link
                 href="/venues"
-                className="block px-3 py-2 text-gray-600 hover:text-gray-900"
+                style={{
+                  display: 'block',
+                  padding: '0.75rem 1rem',
+                  color: '#6b7280',
+                  textDecoration: 'none',
+                  borderRadius: '0.5rem'
+                }}
                 onClick={() => setMobileMenuOpen(false)}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#fef3c7'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
               >
-                Find Venues
+                🏠 Find Venues
               </Link>
               {user ? (
                 <>
                   <Link
                     href="/dashboard"
-                    className="block px-3 py-2 text-gray-600 hover:text-gray-900"
+                    style={{
+                      display: 'block',
+                      padding: '0.75rem 1rem',
+                      color: '#6b7280',
+                      textDecoration: 'none',
+                      borderRadius: '0.5rem'
+                    }}
                     onClick={() => setMobileMenuOpen(false)}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#fce7f3'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    Dashboard
+                    📊 Dashboard
                   </Link>
                   <Link
                     href="/dogs"
-                    className="block px-3 py-2 text-gray-600 hover:text-gray-900"
+                    style={{
+                      display: 'block',
+                      padding: '0.75rem 1rem',
+                      color: '#6b7280',
+                      textDecoration: 'none',
+                      borderRadius: '0.5rem'
+                    }}
                     onClick={() => setMobileMenuOpen(false)}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f3e8ff'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    My Dogs
+                    🐶 My Dogs
                   </Link>
                   <Link
                     href="/bookings"
-                    className="block px-3 py-2 text-gray-600 hover:text-gray-900"
+                    style={{
+                      display: 'block',
+                      padding: '0.75rem 1rem',
+                      color: '#6b7280',
+                      textDecoration: 'none',
+                      borderRadius: '0.5rem'
+                    }}
                     onClick={() => setMobileMenuOpen(false)}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#fed7aa'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    Bookings
+                    📅 Bookings
                   </Link>
                   <Link
                     href="/profile"
-                    className="block px-3 py-2 text-gray-600 hover:text-gray-900"
+                    style={{
+                      display: 'block',
+                      padding: '0.75rem 1rem',
+                      color: '#6b7280',
+                      textDecoration: 'none',
+                      borderRadius: '0.5rem'
+                    }}
                     onClick={() => setMobileMenuOpen(false)}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f3e8ff'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    Profile
+                    👤 Profile
                   </Link>
                   <button
                     onClick={() => {
                       handleSignOut();
                       setMobileMenuOpen(false);
                     }}
-                    className="block w-full text-left px-3 py-2 text-gray-600 hover:text-gray-900"
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '0.75rem 1rem',
+                      color: '#6b7280',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderRadius: '0.5rem',
+                      cursor: 'pointer'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#fee2e2'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    Sign Out
+                    👋 Sign Out
                   </button>
                 </>
               ) : (
                 <>
                   <Link
                     href="/auth/login"
-                    className="block px-3 py-2 text-gray-600 hover:text-gray-900"
+                    style={{
+                      display: 'block',
+                      padding: '0.75rem 1rem',
+                      color: '#6b7280',
+                      textDecoration: 'none',
+                      borderRadius: '0.5rem'
+                    }}
                     onClick={() => setMobileMenuOpen(false)}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
                     Sign In
                   </Link>
                   <Link
                     href="/auth/register"
-                    className="block px-3 py-2 text-gray-600 hover:text-gray-900"
+                    style={{
+                      display: 'block',
+                      padding: '0.75rem 1rem',
+                      color: '#6b7280',
+                      textDecoration: 'none',
+                      borderRadius: '0.5rem'
+                    }}
                     onClick={() => setMobileMenuOpen(false)}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f3e8ff'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    Get Started
+                    🚀 Get Started
                   </Link>
                 </>
               )}
