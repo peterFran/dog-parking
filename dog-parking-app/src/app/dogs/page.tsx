@@ -1,7 +1,7 @@
 'use client';
 
-import { MainLayout } from '@/components/layout/main-layout';
-import { ProtectedRoute } from '@/components/auth/protected-route';
+import { MainLayout } from '../../components/layout/main-layout';
+import { ProtectedRoute } from '../../components/auth/protected-route';
 import Link from 'next/link';
 
 export default function DogsPage() {

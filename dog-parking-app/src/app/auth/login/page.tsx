@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 // import { Button } from '@/components/ui/button'; // Using inline styles instead
 // import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Using inline styles instead
 // import { Dog } from 'lucide-react'; // Using emojis instead
 import { AuthError } from 'firebase/auth';
-import { useRegisterOwner, useOwnerProfile } from '@/hooks/useApi';
+import { useRegisterOwner, useOwnerProfile } from '../../../hooks/useApi';
 
 type AuthenticationState = 'idle' | 'loading' | 'checking' | 'registering' | 'success' | 'error';
 

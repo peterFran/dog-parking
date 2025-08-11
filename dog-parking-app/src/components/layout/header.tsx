@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 // import { Button } from '@/components/ui/button'; // Using inline styles instead
 // import { Dog, Menu, User, LogOut } from 'lucide-react'; // Using emojis instead
 import { useState } from 'react';

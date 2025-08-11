@@ -1,10 +1,10 @@
 'use client';
 
-import { MainLayout } from '@/components/layout/main-layout';
-import { ProtectedRoute } from '@/components/auth/protected-route';
+import { MainLayout } from '../../components/layout/main-layout';
+import { ProtectedRoute } from '../../components/auth/protected-route';
 // import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Not needed with inline styles
 // import { Button } from '@/components/ui/button'; // Not needed with inline styles
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 // import { useOwnerProfile } from '@/hooks/useApi'; // Temporarily disabled due to backend issues
 // import { Dog, Calendar, MapPin, Settings } from 'lucide-react'; // Using emojis instead
 import Link from 'next/link';

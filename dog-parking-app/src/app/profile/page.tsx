@@ -1,8 +1,8 @@
 'use client';
 
-import { MainLayout } from '@/components/layout/main-layout';
-import { ProtectedRoute } from '@/components/auth/protected-route';
-import { useAuth } from '@/contexts/AuthContext';
+import { MainLayout } from '../../components/layout/main-layout';
+import { ProtectedRoute } from '../../components/auth/protected-route';
+import { useAuth } from '../../contexts/AuthContext';
 import Link from 'next/link';
 
 export default function ProfilePage() {

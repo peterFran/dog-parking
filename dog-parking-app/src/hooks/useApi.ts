@@ -1,8 +1,8 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { apiClient } from '../lib/api-client';
+import { useAuth } from '../contexts/AuthContext';
 
 // Query Keys
 export const QueryKeys = {

@@ -1,12 +1,12 @@
 'use client';
 
-import { MainLayout } from '@/components/layout/main-layout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { useVenues } from '@/hooks/useApi';
+import { MainLayout } from '../../components/layout/main-layout';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { useVenues } from '../../hooks/useApi';
 import { MapPin, Phone, Mail, Star, Clock } from 'lucide-react';
 import Link from 'next/link';
-import { Venue } from '@/types';
+import { Venue } from '../../types';
 
 export default function VenuesPage() {
   const { data: venuesData, isLoading, error } = useVenues();

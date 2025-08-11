@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 // import { Button } from '@/components/ui/button'; // Not needed with inline styles
 // import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Not needed with inline styles
 // import { Dog } from 'lucide-react'; // Using emoji instead
 import { AuthError } from 'firebase/auth';
-import { useRegisterOwner } from '@/hooks/useApi';
+import { useRegisterOwner } from '../../../hooks/useApi';
 
 interface GoogleAuthError {
   code: string;
