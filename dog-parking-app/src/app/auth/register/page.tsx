@@ -37,7 +37,7 @@ const formatAuthError = (error: AuthError): string => {
   return GOOGLE_AUTH_ERROR_MESSAGES[error.code] || 'An unexpected error occurred. Please try again.';
 };
 
-export default function RegisterPage(): JSX.Element {
+export default function RegisterPage() {
   const [authState, setAuthState] = useState<AuthState>({
     status: 'idle',
     error: null,

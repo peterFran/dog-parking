@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 // import { Dog, Calendar, MapPin, Settings } from 'lucide-react'; // Using emojis instead
 import Link from 'next/link';
 
-export default function DashboardPage(): JSX.Element {
+export default function DashboardPage() {
   const { user } = useAuth();
   // const { data: ownerProfile, isLoading, error } = useOwnerProfile(); // Temporarily disabled due to backend issues
   const ownerProfile = null; // Mock for now

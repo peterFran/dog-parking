@@ -41,7 +41,7 @@ export default function VenuesPage() {
     );
   }
 
-  const venues = venuesData?.venues || [];
+  const venues = (venuesData as any)?.venues || [];
 
   return (
     <MainLayout>

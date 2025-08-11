@@ -5,7 +5,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 
-export default function ProfilePage(): JSX.Element {
+export default function ProfilePage() {
   const { user } = useAuth();
 
   return (

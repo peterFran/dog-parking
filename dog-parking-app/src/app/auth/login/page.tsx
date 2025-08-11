@@ -32,7 +32,7 @@ const formatAuthError = (error: AuthError): string => {
   return GOOGLE_AUTH_ERROR_MESSAGES[error.code] || 'An unexpected error occurred. Please try again.';
 };
 
-export default function LoginPage(): JSX.Element {
+export default function LoginPage() {
   const [authState, setAuthState] = useState<AuthState>({
     status: 'idle',
     error: null,

@@ -4,7 +4,7 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import Link from 'next/link';
 
-export default function DogsPage(): JSX.Element {
+export default function DogsPage() {
   return (
     <MainLayout>
       <ProtectedRoute>
