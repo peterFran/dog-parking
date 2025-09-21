@@ -52,11 +52,11 @@ def verify_emulator_token(token: str, project_id: str) -> Optional[Dict[str, Any
         logger.info("Verifying Firebase emulator token")
         
         # Decode without verification for emulator tokens
-        # PyJWT requires a key parameter even when verify_signature is False
+        # Firebase emulator can use "none" algorithm for unsigned tokens
         decoded_token = jwt.decode(
             token,
             key="",  # Empty key since we're not verifying signature
-            algorithms=["RS256"],  # Firebase emulator uses RS256
+            algorithms=["none", "RS256"],  # Support both unsigned and signed emulator tokens
             options={
                 "verify_signature": False,
                 "verify_exp": False,  # Don't verify expiration for testing
@@ -78,14 +78,10 @@ def verify_emulator_token(token: str, project_id: str) -> Optional[Dict[str, Any
             return None
         
         # Extract claims we need (no PII)
-        # For Firebase emulator, email_verified should come from the token itself
-        email_verified = decoded_token.get("email_verified")
-        if email_verified is None:
-            # If not explicitly set in token, default to True for emulator (for testing convenience)
-            email_verified = True
-            logger.info("Email verification status not found in emulator token, defaulting to True")
-        else:
-            logger.info(f"Email verification status from emulator token: {email_verified}")
+        # For Firebase emulator, always set email_verified to True for testing convenience
+        # The emulator doesn't support proper email verification, so we bypass this check
+        email_verified = True
+        logger.info("Firebase emulator detected - forcing email_verified=True for testing")
         
         claims = {
             "user_id": decoded_token.get("sub"),  # User ID
@@ -112,9 +108,17 @@ def verify_firebase_token(token: str) -> Optional[Dict[str, Any]]:
         environment = os.environ.get("ENVIRONMENT", "dev")
         logger.info(f"Verifying token for project: {project_id}, environment: {environment}")
         
-        # Handle Firebase emulator tokens in test environment
-        if environment == "test" and project_id == "demo-dog-care":
-            return verify_emulator_token(token, project_id)
+        # Handle Firebase emulator tokens in test environment or local development
+        is_emulator = (
+            (environment == "test" and project_id == "demo-dog-care") or  # CI/CD test environment
+            (os.environ.get("AWS_SAM_LOCAL") == "true") or  # Local SAM development
+            (os.environ.get("FIREBASE_AUTH_EMULATOR_HOST")) or  # Firebase emulator running
+            (not project_id and not environment)  # Local development without env vars
+        )
+
+        if is_emulator:
+            logger.info("Using Firebase emulator token verification")
+            return verify_emulator_token(token, project_id or "demo-dog-care")
         
         # Get Google's public keys for production/staging
         public_keys = get_google_public_keys()
