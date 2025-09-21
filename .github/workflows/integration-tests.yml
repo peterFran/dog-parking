@@ -7,6 +7,11 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 env:
   AWS_REGION: us-east-1
   PYTHON_VERSION: '3.11'
@@ -68,20 +73,34 @@ jobs:
           # Based on staging logs: dog-care-sam-deployments-20250713-51
           BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}"
           echo "📦 Using S3 bucket: $BUCKET_NAME"
-          
+
           # Try to reuse an existing bucket from staging first
           EXISTING_BUCKET_BASE="dog-care-sam-deployments-$(date +%Y%m%d)"
-          
+          BUCKET_FOUND=false
+
           # Look for any existing bucket with today's date
           for i in {1..100}; do
             TEST_BUCKET="${EXISTING_BUCKET_BASE}-${i}"
             if aws s3 ls "s3://$TEST_BUCKET" >/dev/null 2>&1; then
               echo "✅ Found existing bucket: $TEST_BUCKET"
               BUCKET_NAME="$TEST_BUCKET"
+              BUCKET_FOUND=true
               break
             fi
           done
-          
+
+          # Create bucket if none found
+          if [ "$BUCKET_FOUND" = false ]; then
+            echo "📦 Creating new S3 bucket: $BUCKET_NAME"
+            aws s3 mb "s3://$BUCKET_NAME" --region ${{ env.AWS_REGION }}
+            if [ $? -eq 0 ]; then
+              echo "✅ Successfully created bucket: $BUCKET_NAME"
+            else
+              echo "❌ Failed to create bucket: $BUCKET_NAME"
+              exit 1
+            fi
+          fi
+
           echo "📦 Final bucket choice: $BUCKET_NAME"
           
           sam deploy \
@@ -128,7 +147,66 @@ jobs:
           FIREBASE_AUTH_EMULATOR_HOST: ${{ env.FIREBASE_AUTH_EMULATOR_HOST }}
         run: |
           echo "Running integration tests against: $API_BASE_URL"
-          python -m pytest tests/integration/test_api_with_firebase_emulator.py -v --tb=short
+          mkdir -p test-results
+
+          # Run tests with detailed output and capture results
+          python -m pytest tests/integration/test_api_with_firebase_emulator.py \
+            -v --tb=short \
+            --junitxml=test-results/integration-test-results.xml \
+            --capture=no \
+            --strict-markers \
+            --disable-warnings \
+            2>&1 | tee test-results/integration-test-output.txt
+
+          TEST_EXIT_CODE=$?
+          echo "INTEGRATION_TEST_EXIT_CODE=$TEST_EXIT_CODE" >> $GITHUB_ENV
+
+          # Parse results and fail if all tests were skipped
+          TOTAL_TESTS=$(grep -o "collected [0-9]* items" test-results/integration-test-output.txt | grep -o "[0-9]*" || echo "0")
+          SKIPPED_TESTS=$(grep -o "[0-9]* skipped" test-results/integration-test-output.txt | grep -o "^[0-9]*" || echo "0")
+          PASSED_TESTS=$(grep -o "[0-9]* passed" test-results/integration-test-output.txt | grep -o "^[0-9]*" || echo "0")
+          FAILED_TESTS=$(grep -o "[0-9]* failed" test-results/integration-test-output.txt | grep -o "^[0-9]*" || echo "0")
+          ERROR_TESTS=$(grep -o "[0-9]* error" test-results/integration-test-output.txt | grep -o "^[0-9]*" || echo "0")
+
+          echo "TOTAL_TESTS=$TOTAL_TESTS" >> $GITHUB_ENV
+          echo "PASSED_TESTS=$PASSED_TESTS" >> $GITHUB_ENV
+          echo "FAILED_TESTS=$FAILED_TESTS" >> $GITHUB_ENV
+          echo "SKIPPED_TESTS=$SKIPPED_TESTS" >> $GITHUB_ENV
+          echo "ERROR_TESTS=$ERROR_TESTS" >> $GITHUB_ENV
+
+          echo "📊 Test Results: $TOTAL_TESTS total, $PASSED_TESTS passed, $FAILED_TESTS failed, $SKIPPED_TESTS skipped, $ERROR_TESTS errors"
+
+          # Fail the workflow for any of these conditions:
+          # 1. All tests were skipped (indicates setup failure)
+          # 2. pytest exited with non-zero code
+          # 3. Any tests failed
+          # 4. Any tests had errors
+          if [ "$TOTAL_TESTS" -gt 0 ] && [ "$SKIPPED_TESTS" -eq "$TOTAL_TESTS" ]; then
+            echo "❌ All tests were skipped - this indicates a setup failure"
+            echo "INTEGRATION_TEST_STATUS=SKIPPED_ALL" >> $GITHUB_ENV
+            exit 1
+          elif [ "$TEST_EXIT_CODE" -ne 0 ]; then
+            echo "❌ pytest exited with code $TEST_EXIT_CODE"
+            echo "INTEGRATION_TEST_STATUS=FAILED" >> $GITHUB_ENV
+            exit 1
+          elif [ "$FAILED_TESTS" -gt 0 ]; then
+            echo "❌ $FAILED_TESTS test(s) failed"
+            echo "INTEGRATION_TEST_STATUS=FAILED" >> $GITHUB_ENV
+            exit 1
+          elif [ "$ERROR_TESTS" -gt 0 ]; then
+            echo "❌ $ERROR_TESTS test(s) had errors"
+            echo "INTEGRATION_TEST_STATUS=FAILED" >> $GITHUB_ENV
+            exit 1
+          else
+            echo "✅ All tests passed successfully"
+            echo "INTEGRATION_TEST_STATUS=PASSED" >> $GITHUB_ENV
+          fi
+
+          # Extract detailed test summary for PR comment
+          echo "=== Integration Test Results ===" > test-results/test-summary.txt
+          grep -E "^tests/.*::" test-results/integration-test-output.txt >> test-results/test-summary.txt || echo "No individual test results found" >> test-results/test-summary.txt
+          echo "" >> test-results/test-summary.txt
+          tail -3 test-results/integration-test-output.txt >> test-results/test-summary.txt || echo "No final summary found" >> test-results/test-summary.txt
       
       - name: Cleanup - Stop Firebase emulator
         if: always()
@@ -143,15 +221,29 @@ jobs:
           aws cloudformation delete-stack \
             --stack-name ${{ env.TEST_STACK_NAME }} \
             --region ${{ env.AWS_REGION }}
-          
+
           echo "Waiting for stack deletion to complete..."
           aws cloudformation wait stack-delete-complete \
             --stack-name ${{ env.TEST_STACK_NAME }} \
             --region ${{ env.AWS_REGION }} \
             --cli-read-timeout 0 \
             --cli-connect-timeout 60 || true
-          
+
           echo "Stack deletion completed"
+
+      - name: Cleanup - Delete S3 bucket
+        if: always()
+        run: |
+          BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}"
+          echo "Cleaning up S3 bucket: $BUCKET_NAME"
+
+          # Empty bucket first (required before deletion)
+          aws s3 rm "s3://$BUCKET_NAME" --recursive || true
+
+          # Delete the bucket
+          aws s3 rb "s3://$BUCKET_NAME" || true
+
+          echo "S3 bucket cleanup completed"
       
       - name: Upload test results
         if: always()
@@ -162,3 +254,80 @@ jobs:
             test-results/
             htmlcov/
           retention-days: 7
+
+      - name: Comment integration test results on PR
+        uses: actions/github-script@v7
+        if: always() && github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            const testStatus = '${{ env.INTEGRATION_TEST_STATUS }}' || 'UNKNOWN';
+            const passedCount = '${{ env.PASSED_TESTS }}' || '0';
+            const failedCount = '${{ env.FAILED_TESTS }}' || '0';
+            const skippedCount = '${{ env.SKIPPED_TESTS }}' || '0';
+            const errorCount = '${{ env.ERROR_TESTS }}' || '0';
+            const totalCount = '${{ env.TOTAL_TESTS }}' || '0';
+
+            let statusEmoji, statusMessage;
+            if (testStatus === 'PASSED') {
+              statusEmoji = '✅ PASSED';
+              statusMessage = '🎉 All integration tests passed! The API is working correctly with real AWS infrastructure.';
+            } else if (testStatus === 'FAILED') {
+              statusEmoji = '❌ FAILED';
+              statusMessage = '❌ Some integration tests failed. Please check the detailed results below and fix the issues.';
+            } else if (testStatus === 'SKIPPED_ALL') {
+              statusEmoji = '⚠️ SETUP FAILED';
+              statusMessage = '⚠️ All tests were skipped due to setup failure. This usually indicates Firebase Auth emulator connectivity issues.';
+            } else {
+              statusEmoji = '❓ UNKNOWN';
+              statusMessage = '❓ Test status could not be determined. Please check the workflow logs.';
+            }
+
+            // Try to read detailed test summary
+            let testDetails = '';
+            try {
+              testDetails = fs.readFileSync('test-results/test-summary.txt', 'utf8');
+              testDetails = `
+            ### 📊 Detailed Test Results:
+            \`\`\`
+            ${testDetails.trim()}
+            \`\`\`
+            `;
+            } catch (error) {
+              testDetails = '\n*Detailed test results not available*\n';
+            }
+
+            const body = `## 🚀 Integration Test Results
+
+            **Status:** ${statusEmoji}
+            **Test Summary:** ${passedCount} passed, ${failedCount} failed, ${skippedCount} skipped, ${errorCount} errors (${totalCount} total)
+            **Commit:** ${{ github.sha }}
+            **Environment:** Ephemeral AWS stack (\`${{ env.TEST_STACK_NAME }}\`)
+
+            ### What was tested:
+            - 🚀 **AWS Deployment**: SAM stack deployment to us-east-1
+            - 🔥 **Firebase Auth**: Authentication emulator integration
+            - 🧪 **API Integration**: End-to-end API testing with real AWS services
+            - 📊 **Test Coverage**: Full integration test suite
+            - 🧹 **Resource Cleanup**: Automatic stack and S3 bucket cleanup
+
+            ${testDetails}
+
+            ### Test Environment:
+            - **Stack Name**: \`${{ env.TEST_STACK_NAME }}\`
+            - **Firebase Project**: \`${{ env.TEST_PROJECT_ID }}\`
+            - **AWS Region**: \`${{ env.AWS_REGION }}\`
+            - **API Endpoint**: ${testStatus === 'PASSED' ? 'Deployed and tested successfully' : 'Deployed but tests had issues'}
+            - **Test Artifacts**: [Download results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            ${statusMessage}
+
+            **Full logs:** [View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            })

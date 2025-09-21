@@ -74,11 +74,14 @@ def test_create_dog():
             {
                 "name": "Buddy",
                 "breed": "Golden Retriever",
-                "age": 3,
-                "size": "large",
-                "vaccination_status": "up-to-date",
+                "date_of_birth": "2021-01-15",
+                "size": "LARGE",
+                "vaccination_status": "VACCINATED",
+                "microchipped": True,
                 "special_needs": ["medication"],
-                "emergency_contact": "+1234567890",
+                "medical_notes": "Takes medication twice daily",
+                "behavior_notes": "Friendly with other dogs",
+                "favorite_activities": "fetch, swimming",
             }
         ),
     }
@@ -133,7 +136,13 @@ def test_create_dog_no_profile():
         "httpMethod": "POST",
         "path": "/dogs",
         "body": json.dumps(
-            {"name": "Buddy", "breed": "Labrador", "age": 2, "size": "medium"}
+            {
+                "name": "Buddy",
+                "breed": "Labrador",
+                "date_of_birth": "2022-06-10",
+                "size": "MEDIUM",
+                "vaccination_status": "NOT_VACCINATED"
+            }
         ),
     }
 
@@ -381,7 +390,7 @@ def test_update_dog():
         "httpMethod": "PUT",
         "path": "/dogs/dog-123",
         "pathParameters": {"id": "dog-123"},
-        "body": json.dumps({"age": 3, "vaccination_status": "up-to-date"}),
+        "body": json.dumps({"vaccination_status": "VACCINATED", "medical_notes": "Updated medical information"}),
     }
 
     with patch.dict(
@@ -391,8 +400,8 @@ def test_update_dog():
 
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    assert body["age"] == 3
-    assert body["vaccination_status"] == "up-to-date"
+    assert body["vaccination_status"] == "VACCINATED"
+    assert body["medical_notes"] == "Updated medical information"
 
 
 @mock_aws
@@ -488,8 +497,9 @@ def test_invalid_size():
             {
                 "name": "Buddy",
                 "breed": "Labrador",
-                "age": 2,
-                "size": "extra-large",  # Invalid size
+                "date_of_birth": "2022-03-15",
+                "size": "GIGANTIC",  # Invalid size
+                "vaccination_status": "VACCINATED",
             }
         ),
     }

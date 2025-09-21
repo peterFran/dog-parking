@@ -260,21 +260,30 @@ def lambda_handler(event, context):
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "required": ["name", "breed", "age", "size"],
+                                    "required": ["name", "breed", "date_of_birth", "size", "vaccination_status"],
                                     "properties": {
-                                        "name": {"type": "string"},
-                                        "breed": {"type": "string"},
-                                        "age": {"type": "integer", "minimum": 0},
+                                        "name": {"type": "string", "description": "Dog's name"},
+                                        "breed": {"type": "string", "description": "Dog's breed"},
+                                        "date_of_birth": {"type": "string", "format": "date", "description": "Date of birth in YYYY-MM-DD format. Age will be calculated automatically."},
                                         "size": {
                                             "type": "string",
-                                            "enum": ["small", "medium", "large"],
+                                            "enum": ["SMALL", "MEDIUM", "LARGE", "XLARGE"],
+                                            "description": "Dog size category"
                                         },
-                                        "vaccination_status": {"type": "string"},
+                                        "vaccination_status": {
+                                            "type": "string",
+                                            "enum": ["VACCINATED", "NOT_VACCINATED"],
+                                            "description": "Vaccination status"
+                                        },
+                                        "microchipped": {"type": "boolean", "description": "Whether the dog is microchipped (default: false)"},
                                         "special_needs": {
                                             "type": "array",
-                                            "items": {"type": "string"}
+                                            "items": {"type": "string"},
+                                            "description": "Array of special needs or medical requirements"
                                         },
-                                        "emergency_contact": {"type": "string"}
+                                        "medical_notes": {"type": "string", "description": "Medical notes and health information"},
+                                        "behavior_notes": {"type": "string", "description": "Behavioral notes and temperament information"},
+                                        "favorite_activities": {"type": "string", "description": "Comma-separated list of favorite activities"}
                                     },
                                 }
                             }
@@ -325,18 +334,27 @@ def lambda_handler(event, context):
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "name": {"type": "string"},
-                                        "breed": {"type": "string"},
-                                        "age": {"type": "integer", "minimum": 0},
+                                        "name": {"type": "string", "description": "Dog's name"},
+                                        "breed": {"type": "string", "description": "Dog's breed"},
                                         "size": {
                                             "type": "string",
-                                            "enum": ["small", "medium", "large"],
+                                            "enum": ["SMALL", "MEDIUM", "LARGE", "XLARGE"],
+                                            "description": "Dog size category"
                                         },
-                                        "vaccination_status": {"type": "string"},
+                                        "vaccination_status": {
+                                            "type": "string",
+                                            "enum": ["VACCINATED", "NOT_VACCINATED"],
+                                            "description": "Vaccination status"
+                                        },
+                                        "microchipped": {"type": "boolean", "description": "Whether the dog is microchipped"},
                                         "special_needs": {
                                             "type": "array",
-                                            "items": {"type": "string"}
-                                        }
+                                            "items": {"type": "string"},
+                                            "description": "Array of special needs or medical requirements"
+                                        },
+                                        "medical_notes": {"type": "string", "description": "Medical notes and health information"},
+                                        "behavior_notes": {"type": "string", "description": "Behavioral notes and temperament information"},
+                                        "favorite_activities": {"type": "string", "description": "Comma-separated list of favorite activities"}
                                     }
                                 }
                             }
