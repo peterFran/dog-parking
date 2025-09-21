@@ -176,14 +176,29 @@ jobs:
 
           echo "📊 Test Results: $TOTAL_TESTS total, $PASSED_TESTS passed, $FAILED_TESTS failed, $SKIPPED_TESTS skipped, $ERROR_TESTS errors"
 
+          # Fail the workflow for any of these conditions:
+          # 1. All tests were skipped (indicates setup failure)
+          # 2. pytest exited with non-zero code
+          # 3. Any tests failed
+          # 4. Any tests had errors
           if [ "$TOTAL_TESTS" -gt 0 ] && [ "$SKIPPED_TESTS" -eq "$TOTAL_TESTS" ]; then
             echo "❌ All tests were skipped - this indicates a setup failure"
             echo "INTEGRATION_TEST_STATUS=SKIPPED_ALL" >> $GITHUB_ENV
             exit 1
           elif [ "$TEST_EXIT_CODE" -ne 0 ]; then
+            echo "❌ pytest exited with code $TEST_EXIT_CODE"
+            echo "INTEGRATION_TEST_STATUS=FAILED" >> $GITHUB_ENV
+            exit 1
+          elif [ "$FAILED_TESTS" -gt 0 ]; then
+            echo "❌ $FAILED_TESTS test(s) failed"
+            echo "INTEGRATION_TEST_STATUS=FAILED" >> $GITHUB_ENV
+            exit 1
+          elif [ "$ERROR_TESTS" -gt 0 ]; then
+            echo "❌ $ERROR_TESTS test(s) had errors"
             echo "INTEGRATION_TEST_STATUS=FAILED" >> $GITHUB_ENV
             exit 1
           else
+            echo "✅ All tests passed successfully"
             echo "INTEGRATION_TEST_STATUS=PASSED" >> $GITHUB_ENV
           fi
 
