@@ -133,8 +133,8 @@ def create_dog(dogs_table, owners_table, event):
         # Parse request body
         body = json.loads(event.get("body", "{}"))
 
-        # Validate required fields (no longer need owner_id from body)
-        required_fields = ["name", "breed", "age", "size"]
+        # Validate required fields
+        required_fields = ["name", "breed", "date_of_birth", "size", "vaccination_status"]
         for field in required_fields:
             if field not in body:
                 return create_response(
@@ -148,16 +148,44 @@ def create_dog(dogs_table, owners_table, event):
                 400, {"error": "Please complete profile registration first"}
             )
 
-        # Validate age
-        if not isinstance(body["age"], int) or body["age"] < 0:
-            return create_response(400, {"error": "Age must be positive integer"})
+        # Validate date_of_birth
+        try:
+            birth_date = datetime.fromisoformat(body["date_of_birth"].replace('Z', '+00:00'))
+            # Ensure birth_date is timezone-aware
+            if birth_date.tzinfo is None:
+                birth_date = birth_date.replace(tzinfo=timezone.utc)
+            if birth_date > datetime.now(timezone.utc):
+                return create_response(400, {"error": "Birth date cannot be in the future"})
+        except ValueError:
+            return create_response(400, {"error": "Invalid date_of_birth format. Use YYYY-MM-DD"})
 
         # Validate size
-        valid_sizes = ["small", "medium", "large"]
+        valid_sizes = ["SMALL", "MEDIUM", "LARGE", "XLARGE"]
         if body["size"] not in valid_sizes:
             return create_response(
                 400, {"error": f"Invalid size. Must be one of: {valid_sizes}"}
             )
+
+        # Validate vaccination_status
+        valid_vaccination_status = ["VACCINATED", "NOT_VACCINATED"]
+        if body["vaccination_status"] not in valid_vaccination_status:
+            return create_response(
+                400, {"error": f"Invalid vaccination_status. Must be one of: {valid_vaccination_status}"}
+            )
+
+        # Calculate age from date_of_birth
+        today = datetime.now(timezone.utc)
+        age_months = (today.year - birth_date.year) * 12 + (today.month - birth_date.month)
+
+        if age_months < 12:
+            calculated_age = f"{age_months} months" if age_months != 1 else "1 month"
+        else:
+            years = age_months // 12
+            remaining_months = age_months % 12
+            if remaining_months == 0:
+                calculated_age = f"{years} year{'s' if years != 1 else ''}"
+            else:
+                calculated_age = f"{years} year{'s' if years != 1 else ''}, {remaining_months} month{'s' if remaining_months != 1 else ''}"
 
         # Create dog record
         dog_id = f"dog-{uuid.uuid4()}"
@@ -167,12 +195,16 @@ def create_dog(dogs_table, owners_table, event):
             "id": dog_id,
             "name": body["name"],
             "breed": body["breed"],
-            "age": int(body["age"]),
+            "date_of_birth": body["date_of_birth"],
+            "age": calculated_age,  # Calculated from date_of_birth
             "size": body["size"],
-            "owner_id": user_id,  # Use authenticated user_id
-            "vaccination_status": body.get("vaccination_status", "unknown"),
+            "vaccination_status": body["vaccination_status"],
+            "microchipped": body.get("microchipped", False),
             "special_needs": body.get("special_needs", []),
-            "emergency_contact": body.get("emergency_contact", ""),
+            "medical_notes": body.get("medical_notes", ""),
+            "behavior_notes": body.get("behavior_notes", ""),
+            "favorite_activities": body.get("favorite_activities", ""),
+            "owner_id": user_id,  # Use authenticated user_id
             "created_at": now,
             "updated_at": now,
         }
@@ -226,7 +258,10 @@ def update_dog(table, dog_id, event):
             "size",
             "vaccination_status",
             "special_needs",
-            "emergency_contact",
+            "medical_notes",
+            "behavior_notes",
+            "favorite_activities",
+            "microchipped",
         ]
         for field in allowed_fields:
             if field in body:

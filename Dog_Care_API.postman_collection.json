@@ -154,7 +154,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"name\": \"Buddy\",\n    \"breed\": \"Golden Retriever\",\n    \"age\": 3,\n    \"size\": \"large\",\n    \"vaccination_status\": \"up_to_date\",\n    \"special_needs\": [\"none\"],\n    \"emergency_contact\": \"Emergency contact info\"\n}"
+							"raw": "{\n    \"name\": \"Buddy\",\n    \"breed\": \"Golden Retriever\",\n    \"date_of_birth\": \"2021-06-15\",\n    \"size\": \"LARGE\",\n    \"vaccination_status\": \"VACCINATED\",\n    \"microchipped\": true,\n    \"special_needs\": [\"none\"],\n    \"medical_notes\": \"Regular checkups, no known issues\",\n    \"behavior_notes\": \"Friendly, good with other dogs\",\n    \"favorite_activities\": \"fetch, swimming, walks\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/dogs",
@@ -219,7 +219,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"age\": 4,\n    \"vaccination_status\": \"up_to_date\",\n    \"special_needs\": [\"senior_care\"]\n}"
+							"raw": "{\n    \"vaccination_status\": \"VACCINATED\",\n    \"special_needs\": [\"senior_care\"],\n    \"medical_notes\": \"Updated medical information for senior dog\",\n    \"behavior_notes\": \"More calm, prefers shorter walks\",\n    \"microchipped\": true\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/dogs/{{dog_id}}",

@@ -73,8 +73,9 @@ def test_create_dog_simple():
             {
                 "name": "Buddy",
                 "breed": "Golden Retriever",
-                "age": 3,
-                "size": "large",
+                "date_of_birth": "2021-06-15",
+                "size": "LARGE",
+                "vaccination_status": "VACCINATED",
             }
         ),
     }
