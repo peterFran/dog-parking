@@ -7,6 +7,11 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 env:
   AWS_REGION: us-east-1
   PYTHON_VERSION: '3.11'
@@ -149,13 +154,44 @@ jobs:
             -v --tb=short \
             --junitxml=test-results/integration-test-results.xml \
             --capture=no \
+            --strict-markers \
+            --disable-warnings \
             2>&1 | tee test-results/integration-test-output.txt
 
-          # Save test summary for PR comment
-          echo "INTEGRATION_TEST_EXIT_CODE=$?" >> $GITHUB_ENV
+          TEST_EXIT_CODE=$?
+          echo "INTEGRATION_TEST_EXIT_CODE=$TEST_EXIT_CODE" >> $GITHUB_ENV
 
-          # Extract test summary
-          grep -E "(PASSED|FAILED|ERROR|warnings summary)" test-results/integration-test-output.txt > test-results/test-summary.txt || echo "No test summary available" > test-results/test-summary.txt
+          # Parse results and fail if all tests were skipped
+          TOTAL_TESTS=$(grep -o "collected [0-9]* items" test-results/integration-test-output.txt | grep -o "[0-9]*" || echo "0")
+          SKIPPED_TESTS=$(grep -o "[0-9]* skipped" test-results/integration-test-output.txt | grep -o "^[0-9]*" || echo "0")
+          PASSED_TESTS=$(grep -o "[0-9]* passed" test-results/integration-test-output.txt | grep -o "^[0-9]*" || echo "0")
+          FAILED_TESTS=$(grep -o "[0-9]* failed" test-results/integration-test-output.txt | grep -o "^[0-9]*" || echo "0")
+          ERROR_TESTS=$(grep -o "[0-9]* error" test-results/integration-test-output.txt | grep -o "^[0-9]*" || echo "0")
+
+          echo "TOTAL_TESTS=$TOTAL_TESTS" >> $GITHUB_ENV
+          echo "PASSED_TESTS=$PASSED_TESTS" >> $GITHUB_ENV
+          echo "FAILED_TESTS=$FAILED_TESTS" >> $GITHUB_ENV
+          echo "SKIPPED_TESTS=$SKIPPED_TESTS" >> $GITHUB_ENV
+          echo "ERROR_TESTS=$ERROR_TESTS" >> $GITHUB_ENV
+
+          echo "📊 Test Results: $TOTAL_TESTS total, $PASSED_TESTS passed, $FAILED_TESTS failed, $SKIPPED_TESTS skipped, $ERROR_TESTS errors"
+
+          if [ "$TOTAL_TESTS" -gt 0 ] && [ "$SKIPPED_TESTS" -eq "$TOTAL_TESTS" ]; then
+            echo "❌ All tests were skipped - this indicates a setup failure"
+            echo "INTEGRATION_TEST_STATUS=SKIPPED_ALL" >> $GITHUB_ENV
+            exit 1
+          elif [ "$TEST_EXIT_CODE" -ne 0 ]; then
+            echo "INTEGRATION_TEST_STATUS=FAILED" >> $GITHUB_ENV
+            exit 1
+          else
+            echo "INTEGRATION_TEST_STATUS=PASSED" >> $GITHUB_ENV
+          fi
+
+          # Extract detailed test summary for PR comment
+          echo "=== Integration Test Results ===" > test-results/test-summary.txt
+          grep -E "^tests/.*::" test-results/integration-test-output.txt >> test-results/test-summary.txt || echo "No individual test results found" >> test-results/test-summary.txt
+          echo "" >> test-results/test-summary.txt
+          tail -3 test-results/integration-test-output.txt >> test-results/test-summary.txt || echo "No final summary found" >> test-results/test-summary.txt
       
       - name: Cleanup - Stop Firebase emulator
         if: always()
@@ -210,25 +246,46 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const testStatus = '${{ job.status }}' === 'success' ? '✅ PASSED' : '❌ FAILED';
+            const testStatus = '${{ env.INTEGRATION_TEST_STATUS }}' || 'UNKNOWN';
+            const passedCount = '${{ env.PASSED_TESTS }}' || '0';
+            const failedCount = '${{ env.FAILED_TESTS }}' || '0';
+            const skippedCount = '${{ env.SKIPPED_TESTS }}' || '0';
+            const errorCount = '${{ env.ERROR_TESTS }}' || '0';
+            const totalCount = '${{ env.TOTAL_TESTS }}' || '0';
 
-            // Try to read test summary
-            let testSummary = '';
+            let statusEmoji, statusMessage;
+            if (testStatus === 'PASSED') {
+              statusEmoji = '✅ PASSED';
+              statusMessage = '🎉 All integration tests passed! The API is working correctly with real AWS infrastructure.';
+            } else if (testStatus === 'FAILED') {
+              statusEmoji = '❌ FAILED';
+              statusMessage = '❌ Some integration tests failed. Please check the detailed results below and fix the issues.';
+            } else if (testStatus === 'SKIPPED_ALL') {
+              statusEmoji = '⚠️ SETUP FAILED';
+              statusMessage = '⚠️ All tests were skipped due to setup failure. This usually indicates Firebase Auth emulator connectivity issues.';
+            } else {
+              statusEmoji = '❓ UNKNOWN';
+              statusMessage = '❓ Test status could not be determined. Please check the workflow logs.';
+            }
+
+            // Try to read detailed test summary
+            let testDetails = '';
             try {
-              testSummary = fs.readFileSync('test-results/test-summary.txt', 'utf8');
-              testSummary = `
-            ### Test Results Summary:
+              testDetails = fs.readFileSync('test-results/test-summary.txt', 'utf8');
+              testDetails = `
+            ### 📊 Detailed Test Results:
             \`\`\`
-            ${testSummary.trim()}
+            ${testDetails.trim()}
             \`\`\`
             `;
             } catch (error) {
-              testSummary = '\n*Test summary not available*\n';
+              testDetails = '\n*Detailed test results not available*\n';
             }
 
             const body = `## 🚀 Integration Test Results
 
-            **Status:** ${testStatus}
+            **Status:** ${statusEmoji}
+            **Test Summary:** ${passedCount} passed, ${failedCount} failed, ${skippedCount} skipped, ${errorCount} errors (${totalCount} total)
             **Commit:** ${{ github.sha }}
             **Environment:** Ephemeral AWS stack (\`${{ env.TEST_STACK_NAME }}\`)
 
@@ -236,21 +293,19 @@ jobs:
             - 🚀 **AWS Deployment**: SAM stack deployment to us-east-1
             - 🔥 **Firebase Auth**: Authentication emulator integration
             - 🧪 **API Integration**: End-to-end API testing with real AWS services
-            - 📊 **Test Coverage**: Integration test suite with Firebase auth
+            - 📊 **Test Coverage**: Full integration test suite
             - 🧹 **Resource Cleanup**: Automatic stack and S3 bucket cleanup
 
-            ${testSummary}
+            ${testDetails}
 
             ### Test Environment:
             - **Stack Name**: \`${{ env.TEST_STACK_NAME }}\`
             - **Firebase Project**: \`${{ env.TEST_PROJECT_ID }}\`
             - **AWS Region**: \`${{ env.AWS_REGION }}\`
-            - **API Endpoint**: Deployed and tested
+            - **API Endpoint**: ${testStatus === 'PASSED' ? 'Deployed and tested successfully' : 'Deployed but tests had issues'}
             - **Test Artifacts**: [Download results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
-            ${testStatus === '✅ PASSED' ?
-              '🎉 All integration tests passed! The API is working correctly with real AWS infrastructure.' :
-              '❌ Integration tests failed. Please check the workflow logs for detailed error information.'}
+            ${statusMessage}
 
             **Full logs:** [View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
             `;
