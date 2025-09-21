@@ -142,7 +142,20 @@ jobs:
           FIREBASE_AUTH_EMULATOR_HOST: ${{ env.FIREBASE_AUTH_EMULATOR_HOST }}
         run: |
           echo "Running integration tests against: $API_BASE_URL"
-          python -m pytest tests/integration/test_api_with_firebase_emulator.py -v --tb=short
+          mkdir -p test-results
+
+          # Run tests with detailed output and capture results
+          python -m pytest tests/integration/test_api_with_firebase_emulator.py \
+            -v --tb=short \
+            --junitxml=test-results/integration-test-results.xml \
+            --capture=no \
+            2>&1 | tee test-results/integration-test-output.txt
+
+          # Save test summary for PR comment
+          echo "INTEGRATION_TEST_EXIT_CODE=$?" >> $GITHUB_ENV
+
+          # Extract test summary
+          grep -E "(PASSED|FAILED|ERROR|warnings summary)" test-results/integration-test-output.txt > test-results/test-summary.txt || echo "No test summary available" > test-results/test-summary.txt
       
       - name: Cleanup - Stop Firebase emulator
         if: always()
@@ -190,3 +203,61 @@ jobs:
             test-results/
             htmlcov/
           retention-days: 7
+
+      - name: Comment integration test results on PR
+        uses: actions/github-script@v7
+        if: always() && github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            const testStatus = '${{ job.status }}' === 'success' ? '✅ PASSED' : '❌ FAILED';
+
+            // Try to read test summary
+            let testSummary = '';
+            try {
+              testSummary = fs.readFileSync('test-results/test-summary.txt', 'utf8');
+              testSummary = `
+            ### Test Results Summary:
+            \`\`\`
+            ${testSummary.trim()}
+            \`\`\`
+            `;
+            } catch (error) {
+              testSummary = '\n*Test summary not available*\n';
+            }
+
+            const body = `## 🚀 Integration Test Results
+
+            **Status:** ${testStatus}
+            **Commit:** ${{ github.sha }}
+            **Environment:** Ephemeral AWS stack (\`${{ env.TEST_STACK_NAME }}\`)
+
+            ### What was tested:
+            - 🚀 **AWS Deployment**: SAM stack deployment to us-east-1
+            - 🔥 **Firebase Auth**: Authentication emulator integration
+            - 🧪 **API Integration**: End-to-end API testing with real AWS services
+            - 📊 **Test Coverage**: Integration test suite with Firebase auth
+            - 🧹 **Resource Cleanup**: Automatic stack and S3 bucket cleanup
+
+            ${testSummary}
+
+            ### Test Environment:
+            - **Stack Name**: \`${{ env.TEST_STACK_NAME }}\`
+            - **Firebase Project**: \`${{ env.TEST_PROJECT_ID }}\`
+            - **AWS Region**: \`${{ env.AWS_REGION }}\`
+            - **API Endpoint**: Deployed and tested
+            - **Test Artifacts**: [Download results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            ${testStatus === '✅ PASSED' ?
+              '🎉 All integration tests passed! The API is working correctly with real AWS infrastructure.' :
+              '❌ Integration tests failed. Please check the workflow logs for detailed error information.'}
+
+            **Full logs:** [View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            })
