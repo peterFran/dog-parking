@@ -68,20 +68,34 @@ jobs:
           # Based on staging logs: dog-care-sam-deployments-20250713-51
           BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}"
           echo "📦 Using S3 bucket: $BUCKET_NAME"
-          
+
           # Try to reuse an existing bucket from staging first
           EXISTING_BUCKET_BASE="dog-care-sam-deployments-$(date +%Y%m%d)"
-          
+          BUCKET_FOUND=false
+
           # Look for any existing bucket with today's date
           for i in {1..100}; do
             TEST_BUCKET="${EXISTING_BUCKET_BASE}-${i}"
             if aws s3 ls "s3://$TEST_BUCKET" >/dev/null 2>&1; then
               echo "✅ Found existing bucket: $TEST_BUCKET"
               BUCKET_NAME="$TEST_BUCKET"
+              BUCKET_FOUND=true
               break
             fi
           done
-          
+
+          # Create bucket if none found
+          if [ "$BUCKET_FOUND" = false ]; then
+            echo "📦 Creating new S3 bucket: $BUCKET_NAME"
+            aws s3 mb "s3://$BUCKET_NAME" --region ${{ env.AWS_REGION }}
+            if [ $? -eq 0 ]; then
+              echo "✅ Successfully created bucket: $BUCKET_NAME"
+            else
+              echo "❌ Failed to create bucket: $BUCKET_NAME"
+              exit 1
+            fi
+          fi
+
           echo "📦 Final bucket choice: $BUCKET_NAME"
           
           sam deploy \
@@ -143,15 +157,29 @@ jobs:
           aws cloudformation delete-stack \
             --stack-name ${{ env.TEST_STACK_NAME }} \
             --region ${{ env.AWS_REGION }}
-          
+
           echo "Waiting for stack deletion to complete..."
           aws cloudformation wait stack-delete-complete \
             --stack-name ${{ env.TEST_STACK_NAME }} \
             --region ${{ env.AWS_REGION }} \
             --cli-read-timeout 0 \
             --cli-connect-timeout 60 || true
-          
+
           echo "Stack deletion completed"
+
+      - name: Cleanup - Delete S3 bucket
+        if: always()
+        run: |
+          BUCKET_NAME="dog-care-sam-deployments-$(date +%Y%m%d)-${{ github.run_number }}"
+          echo "Cleaning up S3 bucket: $BUCKET_NAME"
+
+          # Empty bucket first (required before deletion)
+          aws s3 rm "s3://$BUCKET_NAME" --recursive || true
+
+          # Delete the bucket
+          aws s3 rb "s3://$BUCKET_NAME" || true
+
+          echo "S3 bucket cleanup completed"
       
       - name: Upload test results
         if: always()
