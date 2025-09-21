@@ -34,6 +34,34 @@ class FirebaseEmulatorAuth:
         # First, try to clear any existing users to avoid EMAIL_EXISTS errors
         self.clear_existing_user(email)
 
+        # For Firebase emulator, try to create user directly with admin API
+        if email_verified:
+            try:
+                admin_url = f"http://{self.emulator_host}/emulator/v1/projects/{self.project_id}/accounts"
+                admin_payload = {
+                    "email": email,
+                    "password": password,
+                    "emailVerified": True,
+                    "disabled": False
+                }
+
+                admin_response = requests.post(admin_url, json=admin_payload)
+                if admin_response.status_code in [200, 201]:
+                    print(f"Created verified user via admin API: {email}")
+                    # Get the localId from admin response
+                    admin_data = admin_response.json()
+                    local_id = admin_data.get('localId')
+
+                    # Sign in to get the token
+                    token = self.sign_in_user(email, password)
+                    return {
+                        'localId': local_id,
+                        'idToken': token
+                    }
+            except Exception as e:
+                print(f"Admin API creation failed: {e}, falling back to regular signup")
+
+        # Fallback to regular signup flow
         url = f"http://{self.emulator_host}/identitytoolkit.googleapis.com/v1/accounts:signUp?key={self.api_key}"
 
         payload = {
