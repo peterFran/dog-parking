@@ -4,8 +4,7 @@ from moto import mock_aws
 from unittest.mock import patch
 import sys
 import os
-from datetime import datetime, timezone
-import pytest
+from datetime import datetime
 from decimal import Decimal
 
 # Add the test directory to the path
@@ -88,6 +87,32 @@ def test_create_booking():
         BillingMode="PAY_PER_REQUEST",
     )
 
+    # Create slots table
+    dynamodb.create_table(
+        TableName="slots-test",
+        KeySchema=[
+            {"AttributeName": "venue_date", "KeyType": "HASH"},
+            {"AttributeName": "slot_time", "KeyType": "RANGE"}
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "venue_date", "AttributeType": "S"},
+            {"AttributeName": "slot_time", "AttributeType": "S"},
+            {"AttributeName": "date", "AttributeType": "S"},
+            {"AttributeName": "venue_id", "AttributeType": "S"}
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "date-venue-index",
+                "KeySchema": [
+                    {"AttributeName": "date", "KeyType": "HASH"},
+                    {"AttributeName": "venue_id", "KeyType": "RANGE"}
+                ],
+                "Projection": {"ProjectionType": "ALL"}
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST"
+    )
+
     # Create test data
     dogs_table = dynamodb.Table("dogs-test")
     dogs_table.put_item(
@@ -110,6 +135,21 @@ def test_create_booking():
             },
         }
     )
+
+    # Create test slots for the booking date (2024-01-01 is a Monday)
+    slots_table = dynamodb.Table("slots-test")
+    for hour in range(9, 18):  # 09:00 to 17:00
+        slots_table.put_item(
+            Item={
+                "venue_date": "venue-123#2024-01-01",
+                "slot_time": f"{hour:02d}:00",
+                "venue_id": "venue-123",
+                "date": "2024-01-01",
+                "available_capacity": 20,
+                "total_capacity": 20,
+                "booked_count": 0
+            }
+        )
 
     # Test event (no owner_id needed - comes from auth)
     event = {
@@ -134,6 +174,7 @@ def test_create_booking():
             "OWNERS_TABLE": "owners-test",
             "VENUES_TABLE": "venues-test",
             "BOOKINGS_TABLE": "bookings-test",
+            "SLOTS_TABLE": "slots-test",
         },
     ):
         response = lambda_handler(event, None)
@@ -247,6 +288,7 @@ def test_create_booking_invalid_dog_owner():
             "OWNERS_TABLE": "owners-test",
             "VENUES_TABLE": "venues-test",
             "BOOKINGS_TABLE": "bookings-test",
+            "SLOTS_TABLE": "slots-test",
         },
     ):
         response = lambda_handler(event, None)
@@ -307,6 +349,7 @@ def test_get_booking():
             "DOGS_TABLE": "dogs-test",
             "OWNERS_TABLE": "owners-test",
             "VENUES_TABLE": "venues-test",
+            "SLOTS_TABLE": "slots-test",
         },
     ):
         response = lambda_handler(event, None)
@@ -372,6 +415,7 @@ def test_list_bookings():
             "DOGS_TABLE": "dogs-test",
             "OWNERS_TABLE": "owners-test",
             "VENUES_TABLE": "venues-test",
+            "SLOTS_TABLE": "slots-test",
         },
     ):
         response = lambda_handler(event, None)
@@ -436,6 +480,7 @@ def test_update_booking():
             "DOGS_TABLE": "dogs-test",
             "OWNERS_TABLE": "owners-test",
             "VENUES_TABLE": "venues-test",
+            "SLOTS_TABLE": "slots-test",
         },
     ):
         response = lambda_handler(event, None)
@@ -496,6 +541,7 @@ def test_cancel_booking():
             "DOGS_TABLE": "dogs-test",
             "OWNERS_TABLE": "owners-test",
             "VENUES_TABLE": "venues-test",
+            "SLOTS_TABLE": "slots-test",
         },
     ):
         response = lambda_handler(event, None)
@@ -525,6 +571,7 @@ def test_missing_required_fields():
             "DOGS_TABLE": "dogs-test",
             "OWNERS_TABLE": "owners-test",
             "VENUES_TABLE": "venues-test",
+            "SLOTS_TABLE": "slots-test",
         },
     ):
         response = lambda_handler(event, None)
@@ -633,6 +680,7 @@ def test_invalid_service_type():
             "OWNERS_TABLE": "owners-test",
             "VENUES_TABLE": "venues-test",
             "BOOKINGS_TABLE": "bookings-test",
+            "SLOTS_TABLE": "slots-test",
         },
     ):
         response = lambda_handler(event, None)
@@ -721,6 +769,7 @@ def test_invalid_datetime():
             "OWNERS_TABLE": "owners-test",
             "VENUES_TABLE": "venues-test",
             "BOOKINGS_TABLE": "bookings-test",
+            "SLOTS_TABLE": "slots-test",
         },
     ):
         response = lambda_handler(event, None)
@@ -809,6 +858,7 @@ def test_end_time_before_start_time():
             "OWNERS_TABLE": "owners-test",
             "VENUES_TABLE": "venues-test",
             "BOOKINGS_TABLE": "bookings-test",
+            "SLOTS_TABLE": "slots-test",
         },
     ):
         response = lambda_handler(event, None)
@@ -856,6 +906,7 @@ def test_method_not_allowed():
             "OWNERS_TABLE": "owners-test",
             "VENUES_TABLE": "venues-test",
             "BOOKINGS_TABLE": "bookings-test",
+            "SLOTS_TABLE": "slots-test",
         },
     ):
         response = lambda_handler(event, None)

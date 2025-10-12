@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 # Add the functions directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "functions"))
 
-# Import the function under test
+# Import the functions under test
 from venue_management.app import (
     lambda_handler,
     create_venue,
@@ -16,10 +16,7 @@ from venue_management.app import (
     list_venues,
     update_venue,
     delete_venue,
-    get_venue_slots,
-    update_venue_slots,
     validate_operating_hours,
-    generate_slots_for_date,
     create_response,
 )
 
@@ -62,9 +59,13 @@ class TestVenueManagement:
         """Test successful venue creation"""
         mock_table.put_item.return_value = None
 
+        mock_dynamodb = MagicMock()
+        mock_slots_table = MagicMock()
+        mock_dynamodb.Table.return_value = mock_slots_table
+
         event = {"body": json.dumps(sample_venue_data), "httpMethod": "POST"}
 
-        response = create_venue(mock_table, event)
+        response = create_venue(mock_table, mock_dynamodb, event)
 
         assert response["statusCode"] == 201
         body = json.loads(response["body"])
@@ -76,9 +77,10 @@ class TestVenueManagement:
 
     def test_create_venue_missing_required_fields(self, mock_table):
         """Test venue creation with missing required fields"""
+        mock_dynamodb = MagicMock()
         event = {"body": json.dumps({"name": "Test Venue"}), "httpMethod": "POST"}
 
-        response = create_venue(mock_table, event)
+        response = create_venue(mock_table, mock_dynamodb, event)
 
         assert response["statusCode"] == 400
         body = json.loads(response["body"])
@@ -88,9 +90,10 @@ class TestVenueManagement:
         """Test venue creation with invalid capacity"""
         sample_venue_data["capacity"] = -5
 
+        mock_dynamodb = MagicMock()
         event = {"body": json.dumps(sample_venue_data), "httpMethod": "POST"}
 
-        response = create_venue(mock_table, event)
+        response = create_venue(mock_table, mock_dynamodb, event)
 
         assert response["statusCode"] == 400
         body = json.loads(response["body"])
@@ -199,96 +202,11 @@ class TestVenueManagement:
     def test_validate_operating_hours_invalid_time_format(self):
         """Test invalid time format in operating hours"""
         operating_hours = {
-            "monday": {"open": True, "start": "8am", "end": "18:00"}  # Invalid format
+            # Invalid format
+            "monday": {"open": True, "start": "8am", "end": "18:00"}
         }
 
         assert validate_operating_hours(operating_hours) is False
-
-    def test_generate_slots_for_date_success(self):
-        """Test successful slot generation"""
-        venue = {
-            "capacity": 10,
-            "slot_duration": 60,
-            "operating_hours": {
-                "monday": {"open": True, "start": "09:00", "end": "12:00"}
-            },
-        }
-
-        slots = generate_slots_for_date(
-            venue, "2024-01-01"
-        )  # Assuming this is a Monday
-
-        assert len(slots) == 3  # 9:00, 10:00, 11:00
-        assert all(slot["total_capacity"] == 10 for slot in slots)
-        assert all(slot["available_capacity"] == 10 for slot in slots)
-
-    def test_generate_slots_for_closed_day(self):
-        """Test slot generation for closed day"""
-        venue = {
-            "capacity": 10,
-            "slot_duration": 60,
-            "operating_hours": {"sunday": {"open": False}},
-        }
-
-        slots = generate_slots_for_date(
-            venue, "2024-01-07"
-        )  # Assuming this is a Sunday
-
-        assert len(slots) == 0
-
-    def test_get_venue_slots_success(self, mock_table):
-        """Test successful venue slots retrieval"""
-        venue_id = "venue-123"
-        venue_data = {
-            "id": venue_id,
-            "capacity": 10,
-            "slot_duration": 60,
-            "operating_hours": {
-                "monday": {"open": True, "start": "09:00", "end": "12:00"}
-            },
-        }
-
-        mock_table.get_item.return_value = {"Item": venue_data}
-
-        event = {"queryStringParameters": {"date": "2024-01-01"}}
-
-        response = get_venue_slots(mock_table, venue_id, event)
-
-        assert response["statusCode"] == 200
-        body = json.loads(response["body"])
-        assert body["venue_id"] == venue_id
-        assert body["date"] == "2024-01-01"
-        assert "slots" in body
-
-    def test_get_venue_slots_missing_date(self, mock_table):
-        """Test venue slots retrieval with missing date"""
-        event = {"queryStringParameters": None}
-
-        response = get_venue_slots(mock_table, "venue-123", event)
-
-        assert response["statusCode"] == 400
-        body = json.loads(response["body"])
-        assert "Date parameter is required" in body["error"]
-
-    def test_update_venue_slots_success(self, mock_table):
-        """Test successful venue slots update"""
-        venue_id = "venue-123"
-        venue_data = {"id": venue_id, "capacity": 10, "available_slots": {}}
-
-        mock_table.get_item.return_value = {"Item": venue_data}
-        mock_table.update_item.return_value = None
-
-        event = {
-            "body": json.dumps(
-                {"date": "2024-01-01", "slot_time": "09:00", "available_capacity": 5}
-            )
-        }
-
-        response = update_venue_slots(mock_table, venue_id, event)
-
-        assert response["statusCode"] == 200
-        body = json.loads(response["body"])
-        assert "updated successfully" in body["message"]
 
     def test_create_response_success(self):
         """Test response creation utility"""
@@ -403,11 +321,16 @@ class TestVenueManagement:
     def test_create_venue_client_error(self, mock_table):
         """Test venue creation with database error"""
         from botocore.exceptions import ClientError
+        from unittest.mock import MagicMock
 
         mock_table.put_item.side_effect = ClientError(
             error_response={"Error": {"Code": "ValidationException"}},
             operation_name="PutItem",
         )
+
+        mock_dynamodb = MagicMock()
+        mock_slots_table = MagicMock()
+        mock_dynamodb.Table.return_value = mock_slots_table
 
         event = {
             "body": json.dumps(
@@ -423,7 +346,7 @@ class TestVenueManagement:
             "httpMethod": "POST",
         }
 
-        response = create_venue(mock_table, event)
+        response = create_venue(mock_table, mock_dynamodb, event)
 
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
@@ -493,42 +416,3 @@ class TestVenueManagement:
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
         assert "Failed to delete venue" in body["error"]
-
-    def test_get_venue_slots_client_error(self, mock_table):
-        """Test venue slots retrieval with database error"""
-        from botocore.exceptions import ClientError
-
-        mock_table.get_item.side_effect = ClientError(
-            error_response={"Error": {"Code": "ResourceNotFoundException"}},
-            operation_name="GetItem",
-        )
-
-        event = {"queryStringParameters": {"date": "2024-01-01"}}
-
-        response = get_venue_slots(mock_table, "venue-123", event)
-
-        assert response["statusCode"] == 500
-        body = json.loads(response["body"])
-        assert "Failed to get venue slots" in body["error"]
-
-    def test_update_venue_slots_client_error(self, mock_table):
-        """Test venue slots update with database error"""
-        from botocore.exceptions import ClientError
-
-        mock_table.get_item.return_value = {"Item": {"id": "venue-123"}}
-        mock_table.update_item.side_effect = ClientError(
-            error_response={"Error": {"Code": "ValidationException"}},
-            operation_name="UpdateItem",
-        )
-
-        event = {
-            "body": json.dumps(
-                {"date": "2024-01-01", "slot_time": "09:00", "available_capacity": 5}
-            )
-        }
-
-        response = update_venue_slots(mock_table, "venue-123", event)
-
-        assert response["statusCode"] == 500
-        body = json.loads(response["body"])
-        assert "Failed to update venue slots" in body["error"]

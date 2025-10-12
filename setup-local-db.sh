@@ -77,6 +77,33 @@ aws dynamodb create-table \
     --endpoint-url http://localhost:8000 \
     --region us-east-1
 
+aws dynamodb create-table \
+    --table-name venues-local \
+    --attribute-definitions \
+        AttributeName=id,AttributeType=S \
+    --key-schema \
+        AttributeName=id,KeyType=HASH \
+    --billing-mode PAY_PER_REQUEST \
+    --endpoint-url http://localhost:8000 \
+    --region us-east-1
+
+aws dynamodb create-table \
+    --table-name slots-local \
+    --attribute-definitions \
+        AttributeName=venue_date,AttributeType=S \
+        AttributeName=slot_time,AttributeType=S \
+        AttributeName=date,AttributeType=S \
+        AttributeName=venue_id,AttributeType=S \
+    --key-schema \
+        AttributeName=venue_date,KeyType=HASH \
+        AttributeName=slot_time,KeyType=RANGE \
+    --global-secondary-indexes \
+        'IndexName=date-venue-index,KeySchema=[{AttributeName=date,KeyType=HASH},{AttributeName=venue_id,KeyType=RANGE}],Projection={ProjectionType=ALL}' \
+    --billing-mode PAY_PER_REQUEST \
+    --endpoint-url http://localhost:8000 \
+    --region us-east-1
+
+echo "✅ Slots table created"
 echo "✅ Local DynamoDB setup complete!"
 echo "📊 DynamoDB Admin UI: http://localhost:8000/shell"
 echo ""

@@ -48,8 +48,8 @@ aws configure
 
 ### What Gets Deployed
 
-- **4 Lambda Functions**: Dog, Owner, Booking, and Payment management
-- **4 DynamoDB Tables**: Dogs, Owners, Bookings, and Payments
+- **6 Lambda Functions**: Dog, Owner, Booking, Venue, Slot, and Payment management
+- **5 DynamoDB Tables**: Dogs, Owners, Bookings, Venues, and Slots (with GSI for cross-venue queries)
 - **1 API Gateway**: REST API with CORS enabled
 - **CloudWatch Log Groups**: For monitoring and debugging
 
@@ -136,11 +136,15 @@ POST /bookings
 {
   "dog_id": "dog-123",
   "owner_id": "owner-123",
+  "venue_id": "venue-123",
   "service_type": "daycare",
   "start_time": "2024-01-01T09:00:00Z",
   "end_time": "2024-01-01T17:00:00Z",
   "special_instructions": "Feed at 12pm"
 }
+
+# Note: The booking will atomically reserve slot capacity at the venue.
+# If capacity is not available, the booking will fail with a 400 error.
 ```
 
 #### List Bookings
@@ -165,6 +169,106 @@ PUT /bookings/{id}
 #### Cancel Booking
 ```bash
 DELETE /bookings/{id}
+```
+
+### Venues API
+
+#### Create Venue
+```bash
+POST /venues
+{
+  "name": "Happy Paws Daycare",
+  "address": {
+    "street": "456 Pet St",
+    "city": "Dogtown",
+    "state": "CA",
+    "zip": "90210"
+  },
+  "capacity": 20,
+  "operating_hours": {
+    "monday": {"open": "09:00", "close": "17:00"},
+    "tuesday": {"open": "09:00", "close": "17:00"},
+    "wednesday": {"open": "09:00", "close": "17:00"},
+    "thursday": {"open": "09:00", "close": "17:00"},
+    "friday": {"open": "09:00", "close": "17:00"},
+    "saturday": {"open": "10:00", "close": "16:00"},
+    "sunday": {"closed": true}
+  },
+  "services": ["daycare", "boarding", "grooming"]
+}
+```
+
+#### Get Venue
+```bash
+GET /venues/{id}
+```
+
+#### List Venues
+```bash
+GET /venues
+```
+
+#### Update Venue
+```bash
+PUT /venues/{id}
+{
+  "name": "Updated Venue Name",
+  "capacity": 25
+}
+```
+
+#### Delete Venue
+```bash
+DELETE /venues/{id}
+```
+
+### Slots API
+
+**Note:** Slots are automatically generated for 30 days when a venue is created.
+
+#### Batch Generate Slots
+```bash
+POST /slots/batch-generate
+{
+  "venue_id": "venue-123",
+  "start_date": "2024-01-01",
+  "end_date": "2024-01-31"
+}
+```
+
+#### Query Availability Across Venues
+```bash
+GET /slots/availability?date=2024-01-15
+
+# Response:
+{
+  "date": "2024-01-15",
+  "venues_with_availability": {
+    "venue-123": [
+      {"time": "09:00", "available": 18, "total": 20},
+      {"time": "10:00", "available": 15, "total": 20},
+      ...
+    ]
+  },
+  "total_venues": 1
+}
+```
+
+#### Get Venue Slots for Date Range
+```bash
+GET /slots/venue/{venue_id}?start_date=2024-01-01&end_date=2024-01-07
+
+# Response:
+{
+  "venue_id": "venue-123",
+  "slots": {
+    "2024-01-01": [
+      {"slot_time": "09:00", "available_capacity": 18, "total_capacity": 20, "booked_count": 2},
+      ...
+    ],
+    "2024-01-02": [...]
+  }
+}
 ```
 
 ### Payments API

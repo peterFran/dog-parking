@@ -24,8 +24,9 @@ sys.path.insert(0, owner_management_dir)
 if "app" in sys.modules:
     del sys.modules["app"]
 
-# Now import the app module
 from app import lambda_handler
+
+# Now import the app module
 
 
 @mock_aws
@@ -184,7 +185,7 @@ def test_update_owner_profile():
     body = json.loads(response["body"])
     assert body["user_id"] == "test-user-123"
     assert body["preferences"]["notifications"] == False
-    assert body["preferences"]["marketing_emails"] == True
+    assert body["preferences"]["marketing_emails"]
 
 
 @mock_aws

@@ -24,8 +24,9 @@ sys.path.insert(0, dog_management_dir)
 if "app" in sys.modules:
     del sys.modules["app"]
 
-# Now import the app module
 from app import lambda_handler
+
+# Now import the app module
 
 
 @mock_aws
@@ -141,7 +142,7 @@ def test_create_dog_no_profile():
                 "breed": "Labrador",
                 "date_of_birth": "2022-06-10",
                 "size": "MEDIUM",
-                "vaccination_status": "NOT_VACCINATED"
+                "vaccination_status": "NOT_VACCINATED",
             }
         ),
     }
@@ -390,7 +391,12 @@ def test_update_dog():
         "httpMethod": "PUT",
         "path": "/dogs/dog-123",
         "pathParameters": {"id": "dog-123"},
-        "body": json.dumps({"vaccination_status": "VACCINATED", "medical_notes": "Updated medical information"}),
+        "body": json.dumps(
+            {
+                "vaccination_status": "VACCINATED",
+                "medical_notes": "Updated medical information",
+            }
+        ),
     }
 
     with patch.dict(
