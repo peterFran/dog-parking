@@ -41,9 +41,10 @@ class FirebaseEmulatorAuth:
         # For Firebase emulator, try to create user directly with admin API
         if email_verified:
             try:
-                admin_url = f"http://{
-                    self.emulator_host}/emulator/v1/projects/{
-                    self.project_id}/accounts"
+                admin_url = (
+                    f"http://{self.emulator_host}/emulator/v1/projects/"
+                    f"{self.project_id}/accounts"
+                )
                 admin_payload = {
                     "email": email,
                     "password": password,
