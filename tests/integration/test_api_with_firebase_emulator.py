@@ -88,10 +88,7 @@ class FirebaseEmulatorAuth:
         # For the Firebase emulator, let's try to verify email after user
         # creation
         if email_verified:
-            print(
-                f"Setting email verification for user: {
-                    user_data['localId']}"
-            )
+            print(f"Setting email verification for user: {user_data['localId']}")
             try:
                 # Wait a moment for user creation to fully complete
                 import time
@@ -114,9 +111,10 @@ class FirebaseEmulatorAuth:
     def verify_user_email(self, local_id):
         """Mark user email as verified in emulator using emulator-specific endpoint"""
         # Try the emulator admin endpoint first
-        admin_url = f"http://{
-            self.emulator_host}/emulator/v1/projects/{
-            self.project_id}/accounts/{local_id}"
+        admin_url = (
+            f"http://{self.emulator_host}/emulator/v1/projects/"
+            f"{self.project_id}/accounts/{local_id}"
+        )
 
         admin_payload = {"emailVerified": True}
 
@@ -127,13 +125,14 @@ class FirebaseEmulatorAuth:
 
         # If admin endpoint fails, try the Identity Toolkit update endpoint
         print(
-            f"Admin endpoint failed (status: {
-                response.status_code}), trying Identity Toolkit endpoint"
+            f"Admin endpoint failed (status: {response.status_code}), "
+            f"trying Identity Toolkit endpoint"
         )
 
-        toolkit_url = f"http://{
-            self.emulator_host}/identitytoolkit.googleapis.com/v1/accounts:update?key={
-            self.api_key}"
+        toolkit_url = (
+            f"http://{self.emulator_host}/identitytoolkit.googleapis.com/v1/"
+            f"accounts:update?key={self.api_key}"
+        )
         toolkit_payload = {"localId": local_id, "emailVerified": True}
 
         response = requests.post(toolkit_url, json=toolkit_payload)
@@ -169,11 +168,8 @@ class FirebaseEmulatorAuth:
 
             decoded = jwt.decode(id_token, options={"verify_signature": False})
             print(
-                f"Token claims: email_verified={
-                    decoded.get('email_verified')}, "
-                f"aud={
-                    decoded.get('aud')}, iss={
-                    decoded.get('iss')}"
+                f"Token claims: email_verified={decoded.get('email_verified')}, "
+                f"aud={decoded.get('aud')}, iss={decoded.get('iss')}"
             )
         except Exception as e:
             print(f"Could not decode token for debugging: {e}")
@@ -251,14 +247,14 @@ class TestAPIWithFirebaseEmulator:
                 break
             if attempt < max_retries - 1:
                 print(
-                    f"API not ready, waiting 10 seconds... (attempt {
-                        attempt + 1}/{max_retries})"
+                    f"API not ready, waiting 10 seconds... "
+                    f"(attempt {attempt + 1}/{max_retries})"
                 )
                 time.sleep(10)
             else:
                 pytest.skip(
-                    f"API not available at {
-                        cls.api_base_url} after {max_retries} attempts"
+                    f"API not available at {cls.api_base_url} "
+                    f"after {max_retries} attempts"
                 )
 
         print("API is available, proceeding with tests")
@@ -286,17 +282,15 @@ class TestAPIWithFirebaseEmulator:
                     cls.test_email, cls.test_password
                 )
                 print(
-                    f"Successfully created user and obtained token (attempt {
-                        attempt + 1})"
+                    f"Successfully created user and obtained token "
+                    f"(attempt {attempt + 1})"
                 )
                 break
 
             except Exception as e:
                 if attempt < max_auth_retries - 1:
                     print(
-                        f"Auth setup attempt {
-                            attempt +
-                            1} failed: {e}, retrying..."
+                        f"Auth setup attempt {attempt + 1} failed: {e}, retrying..."
                     )
                     time.sleep(2)
                 else:
@@ -348,14 +342,13 @@ class TestAPIWithFirebaseEmulator:
             else:
                 # Log the full response for debugging
                 print(
-                    f"Unexpected status code {
-                        response.status_code} for {endpoint}"
+                    f"Unexpected status code {response.status_code} for {endpoint}"
                 )
                 print(f"Response body: {response.text}")
-                assert (
-                    False
-                ), f"Endpoint {endpoint} should require auth (got {
-                    response.status_code})"
+                assert False, (
+                    f"Endpoint {endpoint} should require auth "
+                    f"(got {response.status_code})"
+                )
 
     def test_02_register_owner_profile(self):
         """Test owner profile registration with auth"""
