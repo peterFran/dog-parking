@@ -41,20 +41,14 @@ def lambda_handler(event, context):
         path_parameters = event.get("pathParameters") or {}
 
         # Route to appropriate handler
-        if "/venues/" in path and "/slots" in path:
-            venue_id = path_parameters.get("id")
-            if http_method == "GET":
-                return get_venue_slots(venues_table, venue_id, event)
-            elif http_method == "POST":
-                return update_venue_slots(venues_table, venue_id, event)
-        elif "/venues" in path:
+        if "/venues" in path:
             if http_method == "GET":
                 if path_parameters.get("id"):
                     return get_venue(venues_table, path_parameters["id"])
                 else:
                     return list_venues(venues_table, event)
             elif http_method == "POST":
-                return create_venue(venues_table, event)
+                return create_venue(venues_table, dynamodb, event)
             elif http_method == "PUT":
                 return update_venue(venues_table, path_parameters["id"], event)
             elif http_method == "DELETE":
@@ -67,7 +61,7 @@ def lambda_handler(event, context):
         return create_response(500, {"error": "Internal server error"})
 
 
-def create_venue(table, event):
+def create_venue(table, dynamodb, event):
     """Create a new venue"""
     try:
         # Parse request body
@@ -103,12 +97,19 @@ def create_venue(table, event):
             "operating_hours": body["operating_hours"],
             "services": body.get("services", ["daycare"]),
             "slot_duration": body.get("slot_duration", 60),  # Default 60 minutes
-            "available_slots": {},  # Will be populated when slots are generated
             "created_at": now,
             "updated_at": now,
         }
 
+        # Save venue first
         table.put_item(Item=venue_item)
+
+        # Auto-generate slots for next 30 days
+        try:
+            slots_table = dynamodb.Table(os.environ.get("SLOTS_TABLE"))
+            auto_generate_initial_slots(venue_id, venue_item, slots_table)
+        except Exception as e:
+            logger.warning(f"Failed to auto-generate slots: {str(e)}")
 
         logger.info(f"Created venue: {venue_id}")
         return create_response(201, venue_item)
@@ -246,112 +247,48 @@ def delete_venue(table, venue_id):
         return create_response(500, {"error": "Failed to delete venue"})
 
 
-def get_venue_slots(table, venue_id, event):
-    """Get available slots for a venue"""
+def auto_generate_initial_slots(venue_id, venue_data, slots_table):
+    """Automatically generate slots for new venues (next 30 days)"""
+    from datetime import date
+
+    start_date = date.today()
+    end_date = start_date + timedelta(days=30)
+
+    slots_created = 0
+    current_date = start_date
+
+    while current_date <= end_date:
+        date_str = current_date.strftime("%Y-%m-%d")
+        day_slots = generate_slots_for_date_helper(venue_data, date_str)
+
+        with slots_table.batch_writer() as batch:
+            for slot in day_slots:
+                batch.put_item(Item={
+                    "venue_date": f"{venue_id}#{date_str}",
+                    "slot_time": slot["time"],
+                    "venue_id": venue_id,
+                    "date": date_str,
+                    "available_capacity": slot["available_capacity"],
+                    "total_capacity": slot["total_capacity"],
+                    "booked_count": 0,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "ttl": int((current_date + timedelta(days=90)).timestamp())
+                })
+                slots_created += 1
+
+        current_date += timedelta(days=1)
+
+    logger.info(f"Auto-generated {slots_created} slots for venue {venue_id}")
+    return slots_created
+
+
+def generate_slots_for_date_helper(venue, date_str):
+    """Helper to generate slot data for a specific date"""
     try:
-        # Get query parameters
-        query_params = event.get("queryStringParameters") or {}
-        date_str = query_params.get("date")  # Format: YYYY-MM-DD
-
-        if not date_str:
-            return create_response(400, {"error": "Date parameter is required"})
-
-        # Get venue
-        venue_response = table.get_item(Key={"id": venue_id})
-        if "Item" not in venue_response:
-            return create_response(404, {"error": "Venue not found"})
-
-        venue = venue_response["Item"]
-
-        # Generate slots for the requested date
-        slots = generate_slots_for_date(venue, date_str)
-
-        return create_response(
-            200, {"venue_id": venue_id, "date": date_str, "slots": slots}
-        )
-
-    except ValueError as e:
-        return create_response(400, {"error": f"Invalid date format: {str(e)}"})
-    except ClientError as e:
-        logger.error(f"Error getting venue slots: {str(e)}")
-        return create_response(500, {"error": "Failed to get venue slots"})
-
-
-def update_venue_slots(table, venue_id, event):
-    """Update slot availability for a venue"""
-    try:
-        # Parse request body
-        body = json.loads(event.get("body", "{}"))
-
-        # Validate required fields
-        required_fields = ["date", "slot_time", "available_capacity"]
-        for field in required_fields:
-            if field not in body:
-                return create_response(
-                    400, {"error": f"Missing required field: {field}"}
-                )
-
-        # Get venue
-        venue_response = table.get_item(Key={"id": venue_id})
-        if "Item" not in venue_response:
-            return create_response(404, {"error": "Venue not found"})
-
-        venue = venue_response["Item"]
-
-        # Update slot availability
-        date_str = body["date"]
-        slot_time = body["slot_time"]
-        available_capacity = body["available_capacity"]
-
-        # Initialize available_slots if not exists
-        if "available_slots" not in venue:
-            venue["available_slots"] = {}
-
-        # Initialize date if not exists
-        if date_str not in venue["available_slots"]:
-            venue["available_slots"][date_str] = {}
-
-        # Update the specific slot
-        venue["available_slots"][date_str][slot_time] = available_capacity
-
-        # Update the venue in database
-        table.update_item(
-            Key={"id": venue_id},
-            UpdateExpression="SET available_slots = :slots, updated_at = :updated_at",
-            ExpressionAttributeValues={
-                ":slots": venue["available_slots"],
-                ":updated_at": datetime.now(timezone.utc).isoformat(),
-            },
-        )
-
-        logger.info(f"Updated slots for venue: {venue_id}")
-        return create_response(
-            200,
-            {
-                "message": "Slot availability updated successfully",
-                "venue_id": venue_id,
-                "date": date_str,
-                "slot_time": slot_time,
-                "available_capacity": available_capacity,
-            },
-        )
-
-    except json.JSONDecodeError:
-        return create_response(400, {"error": "Invalid JSON in request body"})
-    except ClientError as e:
-        logger.error(f"Error updating venue slots: {str(e)}")
-        return create_response(500, {"error": "Failed to update venue slots"})
-
-
-def generate_slots_for_date(venue, date_str):
-    """Generate time slots for a specific date based on venue operating hours"""
-    try:
-        # Parse date
         date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
         day_of_week = date_obj.strftime("%A").lower()
 
-        # Get operating hours for the day
-        operating_hours = venue["operating_hours"]
+        operating_hours = venue.get("operating_hours", {})
         if day_of_week not in operating_hours:
             return []
 
@@ -359,43 +296,25 @@ def generate_slots_for_date(venue, date_str):
         if not day_hours.get("open", True):
             return []
 
-        # Parse times
         start_time = datetime.strptime(day_hours["start"], "%H:%M").time()
         end_time = datetime.strptime(day_hours["end"], "%H:%M").time()
-
-        # Generate slots
-        slots = []
         slot_duration = timedelta(minutes=int(venue.get("slot_duration", 60)))
 
+        slots = []
         current_time = datetime.combine(date_obj, start_time)
         end_datetime = datetime.combine(date_obj, end_time)
 
         while current_time < end_datetime:
-            slot_time_str = current_time.strftime("%H:%M")
-
-            # Check if slot is in available_slots, otherwise use venue capacity
-            available_capacity = venue["capacity"]
-            if "available_slots" in venue:
-                if date_str in venue["available_slots"]:
-                    if slot_time_str in venue["available_slots"][date_str]:
-                        available_capacity = venue["available_slots"][date_str][
-                            slot_time_str
-                        ]
-
-            slots.append(
-                {
-                    "time": slot_time_str,
-                    "available_capacity": available_capacity,
-                    "total_capacity": venue["capacity"],
-                }
-            )
-
+            slots.append({
+                "time": current_time.strftime("%H:%M"),
+                "available_capacity": venue["capacity"],
+                "total_capacity": venue["capacity"]
+            })
             current_time += slot_duration
 
         return slots
-
-    except ValueError as e:
-        raise ValueError(f"Invalid date or time format: {str(e)}")
+    except (ValueError, KeyError):
+        return []
 
 
 def validate_operating_hours(operating_hours):

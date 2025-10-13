@@ -3,7 +3,7 @@ import boto3
 import uuid
 import os
 import decimal
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from botocore.exceptions import ClientError
 import logging
 import sys
@@ -36,11 +36,13 @@ def lambda_handler(event, context):
         dogs_table_name = os.environ.get("DOGS_TABLE")
         owners_table_name = os.environ.get("OWNERS_TABLE")
         venues_table_name = os.environ.get("VENUES_TABLE")
+        slots_table_name = os.environ.get("SLOTS_TABLE")
 
         bookings_table = dynamodb.Table(bookings_table_name)
         dogs_table = dynamodb.Table(dogs_table_name)
         owners_table = dynamodb.Table(owners_table_name)
         venues_table = dynamodb.Table(venues_table_name)
+        slots_table = dynamodb.Table(slots_table_name)
 
         # Log the incoming event
         logger.info(f"Received event: {json.dumps(event)}")
@@ -58,7 +60,7 @@ def lambda_handler(event, context):
                 return list_bookings(bookings_table, event)
         elif http_method == "POST":
             return create_booking_with_auth(
-                bookings_table, dogs_table, owners_table, venues_table, event
+                bookings_table, dogs_table, owners_table, venues_table, slots_table, event
             )
         elif http_method == "PUT":
             return update_booking(bookings_table, path_parameters["id"], event)
@@ -114,7 +116,7 @@ def list_bookings(table, event):
 
 @require_auth
 def create_booking_with_auth(
-    bookings_table, dogs_table, owners_table, venues_table, event
+    bookings_table, dogs_table, owners_table, venues_table, slots_table, event
 ):
     """Create a new booking with authentication"""
     try:
@@ -181,10 +183,14 @@ def create_booking_with_auth(
         if start_time >= end_time:
             return create_response(400, {"error": "Start time must be before end time"})
 
-        # Check venue availability for the requested time slot
-        availability_check = check_venue_availability(venue, start_time, end_time)
-        if not availability_check["available"]:
-            return create_response(400, {"error": availability_check["message"]})
+        # Reserve slot capacity atomically
+        try:
+            reserve_result = reserve_slot_capacity(slots_table, body["venue_id"], start_time, end_time)
+            if not reserve_result["success"]:
+                return create_response(400, {"error": reserve_result["message"]})
+        except ClientError as e:
+            logger.error(f"Failed to reserve capacity: {str(e)}")
+            return create_response(500, {"error": "Booking failed - capacity unavailable"})
 
         # Calculate price based on service type and duration
         price = calculate_price(body["service_type"], start_time, end_time)
@@ -278,12 +284,29 @@ def update_booking(table, booking_id, event):
 
 
 def cancel_booking(table, booking_id):
-    """Cancel a booking"""
+    """Cancel a booking and release slot capacity"""
     try:
-        # Check if booking exists
+        # Get booking details first
         existing_booking = table.get_item(Key={"id": booking_id})
         if "Item" not in existing_booking:
             return create_response(404, {"error": "Booking not found"})
+
+        booking = existing_booking["Item"]
+
+        # Release slot capacity
+        try:
+            dynamodb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+            if os.environ.get("AWS_SAM_LOCAL"):
+                dynamodb = boto3.resource("dynamodb", region_name="us-east-1", endpoint_url="http://dynamodb-local:8000")
+            slots_table = dynamodb.Table(os.environ.get("SLOTS_TABLE"))
+            release_slot_capacity(
+                slots_table,
+                booking["venue_id"],
+                datetime.fromisoformat(booking["start_time"].replace("Z", "+00:00")),
+                datetime.fromisoformat(booking["end_time"].replace("Z", "+00:00"))
+            )
+        except Exception as e:
+            logger.warning(f"Failed to release capacity: {str(e)}")
 
         # Update status to cancelled
         response = table.update_item(
@@ -305,73 +328,113 @@ def cancel_booking(table, booking_id):
         return create_response(500, {"error": "Failed to cancel booking"})
 
 
-def check_venue_availability(venue, start_time, end_time):
-    """Check if venue has availability for the requested time slot"""
-    from datetime import timedelta
-
-    # Get date and time from start_time
+def reserve_slot_capacity(slots_table, venue_id, start_time, end_time):
+    """
+    Atomically decrement available capacity for booking time slots.
+    Rolls back on failure to maintain consistency.
+    """
     date_str = start_time.strftime("%Y-%m-%d")
-    day_of_week = start_time.strftime("%A").lower()
+    slot_duration = timedelta(hours=1)
 
-    # Check if venue is open on this day
-    operating_hours = venue.get("operating_hours", {})
-    if day_of_week not in operating_hours:
-        return {"available": False, "message": "Venue is not open on this day"}
+    reserved_slots = []
+    current_time = start_time
 
-    day_hours = operating_hours[day_of_week]
-    if not day_hours.get("open", True):
-        return {"available": False, "message": "Venue is closed on this day"}
-
-    # Parse venue operating hours
     try:
-        venue_start = datetime.strptime(day_hours["start"], "%H:%M").time()
-        venue_end = datetime.strptime(day_hours["end"], "%H:%M").time()
-
-        # Check if booking time is within operating hours
-        booking_start_time = start_time.time()
-        booking_end_time = end_time.time()
-
-        if booking_start_time < venue_start or booking_end_time > venue_end:
-            return {
-                "available": False,
-                "message": f"Booking time outside operating hours ({day_hours['start']} - {day_hours['end']})",
-            }
-
-        # Check slot availability
-        available_slots = venue.get("available_slots", {})
-        slot_duration = timedelta(minutes=int(venue.get("slot_duration", 60)))
-
-        # Generate time slots for the booking period
-        current_time = start_time
         while current_time < end_time:
             slot_time_str = current_time.strftime("%H:%M")
+            venue_date_key = f"{venue_id}#{date_str}"
 
-            # Check if this slot has availability
-            slot_capacity = venue["capacity"]  # Default to venue capacity
-            if (
-                date_str in available_slots
-                and slot_time_str in available_slots[date_str]
-            ):
-                slot_capacity = available_slots[date_str][slot_time_str]
+            # Atomic decrement with condition
+            try:
+                slots_table.update_item(
+                    Key={
+                        "venue_date": venue_date_key,
+                        "slot_time": slot_time_str
+                    },
+                    UpdateExpression="SET available_capacity = available_capacity - :dec, booked_count = booked_count + :inc",
+                    ConditionExpression="available_capacity >= :dec",
+                    ExpressionAttributeValues={
+                        ":dec": 1,
+                        ":inc": 1
+                    },
+                    ReturnValues="UPDATED_NEW"
+                )
 
-            if slot_capacity <= 0:
-                return {
-                    "available": False,
-                    "message": f"No availability at {slot_time_str} on {date_str}",
-                }
+                reserved_slots.append({
+                    "venue_date": venue_date_key,
+                    "slot_time": slot_time_str
+                })
+
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                    # Rollback previously reserved slots
+                    rollback_reserved_slots(slots_table, reserved_slots)
+                    return {
+                        "success": False,
+                        "message": f"No availability at {slot_time_str} on {date_str}"
+                    }
+                else:
+                    raise
 
             current_time += slot_duration
 
         return {
-            "available": True,
-            "message": "Venue is available for the requested time",
+            "success": True,
+            "message": "Capacity reserved successfully",
+            "reserved_slots": reserved_slots
         }
 
-    except ValueError as e:
-        return {
-            "available": False,
-            "message": f"Invalid venue operating hours: {str(e)}",
-        }
+    except Exception as e:
+        # Rollback on any error
+        rollback_reserved_slots(slots_table, reserved_slots)
+        raise
+
+
+def rollback_reserved_slots(slots_table, reserved_slots):
+    """Rollback capacity reservations if booking fails"""
+    for slot in reserved_slots:
+        try:
+            slots_table.update_item(
+                Key={
+                    "venue_date": slot["venue_date"],
+                    "slot_time": slot["slot_time"]
+                },
+                UpdateExpression="SET available_capacity = available_capacity + :inc, booked_count = booked_count - :dec",
+                ExpressionAttributeValues={
+                    ":inc": 1,
+                    ":dec": 1
+                }
+            )
+        except ClientError as e:
+            logger.error(f"Rollback failed for slot {slot}: {str(e)}")
+
+
+def release_slot_capacity(slots_table, venue_id, start_time, end_time):
+    """Release slot capacity when booking is cancelled"""
+    date_str = start_time.strftime("%Y-%m-%d")
+    slot_duration = timedelta(hours=1)
+    current_time = start_time
+
+    while current_time < end_time:
+        slot_time_str = current_time.strftime("%H:%M")
+        try:
+            slots_table.update_item(
+                Key={
+                    "venue_date": f"{venue_id}#{date_str}",
+                    "slot_time": slot_time_str
+                },
+                UpdateExpression="SET available_capacity = available_capacity + :inc, booked_count = booked_count - :dec",
+                ConditionExpression="booked_count > :zero",
+                ExpressionAttributeValues={
+                    ":inc": 1,
+                    ":dec": 1,
+                    ":zero": 0
+                }
+            )
+        except ClientError as e:
+            logger.error(f"Failed to release slot {slot_time_str}: {str(e)}")
+
+        current_time += slot_duration
 
 
 def calculate_price(service_type, start_time, end_time):

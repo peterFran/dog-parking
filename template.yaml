@@ -28,6 +28,7 @@ Globals:
         OWNERS_TABLE: !Ref OwnersTable
         BOOKINGS_TABLE: !Ref BookingsTable
         VENUES_TABLE: !Ref VenuesTable
+        SLOTS_TABLE: !Ref SlotsTable
         GOOGLE_PROJECT_ID: !Ref GoogleProjectId
   Api:
     Cors:
@@ -144,22 +145,39 @@ Resources:
                 type: aws_proxy
                 httpMethod: POST
                 uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
-          /venues/{id}/slots:
-            get:
-              x-amazon-apigateway-integration:
-                type: aws_proxy
-                httpMethod: POST
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+          /slots/batch-generate:
             post:
               x-amazon-apigateway-integration:
                 type: aws_proxy
                 httpMethod: POST
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SlotManagementFunction.Arn}/invocations"
             options:
               x-amazon-apigateway-integration:
                 type: aws_proxy
                 httpMethod: POST
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VenueManagementFunction.Arn}/invocations"
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SlotManagementFunction.Arn}/invocations"
+          /slots/availability:
+            get:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SlotManagementFunction.Arn}/invocations"
+            options:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SlotManagementFunction.Arn}/invocations"
+          /slots/venue/{venue_id}:
+            get:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SlotManagementFunction.Arn}/invocations"
+            options:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SlotManagementFunction.Arn}/invocations"
           /docs:
             get:
               x-amazon-apigateway-integration:
@@ -244,6 +262,8 @@ Resources:
             TableName: !Ref OwnersTable
         - DynamoDBCrudPolicy:
             TableName: !Ref VenuesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SlotsTable
 
   VenueManagementFunction:
     Type: AWS::Serverless::Function
@@ -252,6 +272,20 @@ Resources:
       CodeUri: functions/venue_management/
       Handler: app.lambda_handler
       Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VenuesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SlotsTable
+
+  SlotManagementFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "slot-management-${Environment}"
+      CodeUri: functions/slot_management/
+      Handler: app.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SlotsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref VenuesTable
 
@@ -302,6 +336,14 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DogCareApi}/*/openapi.json"
+
+  SlotManagementApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SlotManagementFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DogCareApi}/*/*"
 
 
   # DynamoDB Tables
@@ -386,6 +428,40 @@ Resources:
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
 
+  SlotsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "slots-${Environment}"
+      AttributeDefinitions:
+        - AttributeName: venue_date
+          AttributeType: S
+        - AttributeName: slot_time
+          AttributeType: S
+        - AttributeName: date
+          AttributeType: S
+        - AttributeName: venue_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: venue_date
+          KeyType: HASH
+        - AttributeName: slot_time
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: date-venue-index
+          KeySchema:
+            - AttributeName: date
+              KeyType: HASH
+            - AttributeName: venue_id
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
 
   # CloudWatch Log Groups
   DogManagementLogGroup:
@@ -423,6 +499,13 @@ Resources:
       LogGroupName: !Sub "/aws/lambda/docs-${Environment}-${AWS::StackName}"
       RetentionInDays: 14
 
+  SlotManagementLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/slot-management-${Environment}-${AWS::StackName}"
+      RetentionInDays: 14
+
 
 Outputs:
   DogCareApiUrl:
@@ -454,4 +537,10 @@ Outputs:
     Value: !Ref VenuesTable
     Export:
       Name: !Sub "${AWS::StackName}-VenuesTable"
+
+  SlotsTableName:
+    Description: "DynamoDB table name for Slots"
+    Value: !Ref SlotsTable
+    Export:
+      Name: !Sub "${AWS::StackName}-SlotsTable"
 

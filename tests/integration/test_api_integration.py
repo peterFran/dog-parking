@@ -395,3 +395,204 @@ class TestAPIErrorScenarios:
             204,
             405,
         ]  # Various valid responses for OPTIONS
+
+
+class TestSlotManagementIntegration:
+    """Integration tests for slot management functionality"""
+
+    @classmethod
+    def setup_class(cls):
+        """Setup test class"""
+        cls.api_base_url = os.environ.get("API_BASE_URL", "http://127.0.0.1:3000")
+        cls.headers = {"Content-Type": "application/json"}
+        cls.test_data = {}
+
+    def test_01_create_venue_for_slots(self):
+        """Create a test venue for slot generation"""
+        venue_data = {
+            "name": f"Slot Test Venue {int(time.time())}",
+            "address": {
+                "street": "123 Slot Test St",
+                "city": "Test City",
+                "state": "TS",
+                "zip": "12345",
+            },
+            "capacity": 20,
+            "operating_hours": {
+                "monday": {"open": "09:00", "close": "17:00"},
+                "tuesday": {"open": "09:00", "close": "17:00"},
+                "wednesday": {"open": "09:00", "close": "17:00"},
+                "thursday": {"open": "09:00", "close": "17:00"},
+                "friday": {"open": "09:00", "close": "17:00"},
+                "saturday": {"open": "10:00", "close": "16:00"},
+                "sunday": {"closed": True},
+            },
+            "services": ["daycare", "boarding"],
+        }
+
+        response = requests.post(
+            f"{self.api_base_url}/venues", json=venue_data, headers=self.headers
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert "id" in data
+        assert data["name"] == venue_data["name"]
+        assert data["capacity"] == 20
+
+        # Store venue ID for subsequent tests
+        self.test_data["venue_id"] = data["id"]
+
+    def test_02_batch_generate_slots(self):
+        """Test batch slot generation for a venue"""
+        if "venue_id" not in self.test_data:
+            pytest.skip("Venue creation test must pass first")
+
+        # Generate slots for next 7 days
+        from datetime import date, timedelta
+
+        start_date = date.today()
+        end_date = start_date + timedelta(days=7)
+
+        slot_data = {
+            "venue_id": self.test_data["venue_id"],
+            "start_date": start_date.strftime("%Y-%m-%d"),
+            "end_date": end_date.strftime("%Y-%m-%d"),
+        }
+
+        response = requests.post(
+            f"{self.api_base_url}/slots/batch-generate",
+            json=slot_data,
+            headers=self.headers,
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["message"] == "Slots generated successfully"
+        assert data["venue_id"] == self.test_data["venue_id"]
+        assert data["slots_created"] > 0
+
+        # Store for verification
+        self.test_data["slots_created"] = data["slots_created"]
+        self.test_data["slot_start_date"] = start_date.strftime("%Y-%m-%d")
+        self.test_data["slot_end_date"] = end_date.strftime("%Y-%m-%d")
+
+    def test_03_query_availability_across_venues(self):
+        """Test querying slot availability by date"""
+        if "slot_start_date" not in self.test_data:
+            pytest.skip("Slot generation test must pass first")
+
+        response = requests.get(
+            f"{self.api_base_url}/slots/availability",
+            params={"date": self.test_data["slot_start_date"]},
+            headers=self.headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "date" in data
+        assert data["date"] == self.test_data["slot_start_date"]
+        assert "venues_with_availability" in data
+        assert "total_venues" in data
+
+        # Our test venue should be in the results
+        assert self.test_data["venue_id"] in data["venues_with_availability"]
+        venue_slots = data["venues_with_availability"][self.test_data["venue_id"]]
+        assert len(venue_slots) > 0
+
+        # Each slot should have required fields
+        for slot in venue_slots:
+            assert "time" in slot
+            assert "available" in slot
+            assert "total" in slot
+
+    def test_04_get_venue_slots_range(self):
+        """Test getting slots for a specific venue"""
+        if "venue_id" not in self.test_data or "slot_start_date" not in self.test_data:
+            pytest.skip("Previous tests must pass first")
+
+        response = requests.get(
+            f"{self.api_base_url}/slots/venue/{self.test_data['venue_id']}",
+            params={
+                "start_date": self.test_data["slot_start_date"],
+                "end_date": self.test_data["slot_end_date"],
+            },
+            headers=self.headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "venue_id" in data
+        assert data["venue_id"] == self.test_data["venue_id"]
+        assert "slots" in data
+
+        # Should have slots for multiple days
+        slots_by_date = data["slots"]
+        assert len(slots_by_date) > 0
+
+        # Verify slot structure
+        for date_key, date_slots in slots_by_date.items():
+            if date_slots:  # Some days might be closed (Sunday)
+                for slot in date_slots:
+                    assert "slot_time" in slot
+                    assert "available_capacity" in slot
+                    assert "total_capacity" in slot
+
+    def test_05_batch_generate_with_invalid_dates(self):
+        """Test slot generation with invalid date range"""
+        if "venue_id" not in self.test_data:
+            pytest.skip("Venue creation test must pass first")
+
+        slot_data = {
+            "venue_id": self.test_data["venue_id"],
+            "start_date": "2024-12-31",
+            "end_date": "2024-01-01",  # end_date before start_date
+        }
+
+        response = requests.post(
+            f"{self.api_base_url}/slots/batch-generate",
+            json=slot_data,
+            headers=self.headers,
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "error" in data
+        assert "start_date must be before or equal to end_date" in data["error"]
+
+    def test_06_query_availability_missing_date(self):
+        """Test availability query without required date parameter"""
+        response = requests.get(
+            f"{self.api_base_url}/slots/availability",
+            headers=self.headers,
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "error" in data
+        assert "Date parameter required" in data["error"]
+
+    def test_07_get_venue_slots_missing_start_date(self):
+        """Test getting venue slots without required start_date"""
+        if "venue_id" not in self.test_data:
+            pytest.skip("Venue creation test must pass first")
+
+        response = requests.get(
+            f"{self.api_base_url}/slots/venue/{self.test_data['venue_id']}",
+            headers=self.headers,
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "error" in data
+        assert "start_date parameter required" in data["error"]
+
+    def test_08_cleanup_venue(self):
+        """Clean up test venue"""
+        if "venue_id" in self.test_data:
+            response = requests.delete(
+                f"{self.api_base_url}/venues/{self.test_data['venue_id']}",
+                headers=self.headers,
+            )
+            # Should succeed or be already deleted
+            assert response.status_code in [200, 204, 404]

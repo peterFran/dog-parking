@@ -3,24 +3,45 @@
     "DOGS_TABLE": "dogs-local",
     "OWNERS_TABLE": "owners-local",
     "AWS_SAM_LOCAL": "true",
-    "AWS_DEFAULT_REGION": "us-east-1"
+    "AWS_DEFAULT_REGION": "us-east-1",
+    "DYNAMODB_ENDPOINT": "http://dynamodb-local:8000",
+    "FIREBASE_AUTH_EMULATOR_HOST": "host.docker.internal:9099"
   },
   "OwnerManagementFunction": {
     "OWNERS_TABLE": "owners-local",
     "AWS_SAM_LOCAL": "true",
-    "AWS_DEFAULT_REGION": "us-east-1"
+    "AWS_DEFAULT_REGION": "us-east-1",
+    "DYNAMODB_ENDPOINT": "http://dynamodb-local:8000",
+    "FIREBASE_AUTH_EMULATOR_HOST": "host.docker.internal:9099"
   },
   "BookingManagementFunction": {
     "BOOKINGS_TABLE": "bookings-local",
     "DOGS_TABLE": "dogs-local",
     "OWNERS_TABLE": "owners-local",
     "AWS_SAM_LOCAL": "true",
-    "AWS_DEFAULT_REGION": "us-east-1"
+    "AWS_DEFAULT_REGION": "us-east-1",
+    "DYNAMODB_ENDPOINT": "http://dynamodb-local:8000",
+    "FIREBASE_AUTH_EMULATOR_HOST": "host.docker.internal:9099"
   },
   "PaymentProcessingFunction": {
     "PAYMENTS_TABLE": "payments-local",
     "BOOKINGS_TABLE": "bookings-local",
     "AWS_SAM_LOCAL": "true",
-    "AWS_DEFAULT_REGION": "us-east-1"
+    "AWS_DEFAULT_REGION": "us-east-1",
+    "DYNAMODB_ENDPOINT": "http://dynamodb-local:8000",
+    "FIREBASE_AUTH_EMULATOR_HOST": "host.docker.internal:9099"
+  },
+  "VenueManagementFunction": {
+    "VENUES_TABLE": "venues-local",
+    "AWS_SAM_LOCAL": "true",
+    "AWS_DEFAULT_REGION": "us-east-1",
+    "DYNAMODB_ENDPOINT": "http://dynamodb-local:8000",
+    "FIREBASE_AUTH_EMULATOR_HOST": "host.docker.internal:9099"
+  },
+  "DocsFunction": {
+    "AWS_SAM_LOCAL": "true",
+    "AWS_DEFAULT_REGION": "us-east-1",
+    "DYNAMODB_ENDPOINT": "http://dynamodb-local:8000",
+    "FIREBASE_AUTH_EMULATOR_HOST": "host.docker.internal:9099"
   }
 }
