@@ -1,0 +1,1726 @@
+openapi: 3.0.3
+info:
+  title: Dog Care Platform API
+  version: 1.0.0
+  description: |
+    A serverless dog care platform API providing dog registration, bookings,
+    venue management, and slot scheduling services with Firebase authentication.
+
+    ## Authentication
+    All endpoints (except public venue listing) require Firebase JWT authentication.
+    Include the Firebase ID token in the Authorization header as a Bearer token.
+
+    ## Business Model
+    - Subscription-based hour blocks (5hr/£100, 10hr/£200, 20hr/£380)
+    - Service types: daycare, boarding, grooming, walking, training
+    - QR code + employee verification for venue access
+
+  contact:
+    name: API Support
+    email: support@dogcare.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Local development (SAM Local)
+  - url: https://api-dev.dogcare.com/dev
+    description: Development environment
+  - url: https://api-staging.dogcare.com/staging
+    description: Staging environment
+  - url: https://api.dogcare.com/prod
+    description: Production environment
+
+tags:
+  - name: Dogs
+    description: Dog profile management with owner verification
+  - name: Owners
+    description: User profile and preferences (no PII storage)
+  - name: Bookings
+    description: Service bookings with venue validation and slot management
+  - name: Venues
+    description: Venue operations and capacity management
+  - name: Slots
+    description: Time slot availability and batch generation
+  - name: Documentation
+    description: API documentation endpoints
+
+security:
+  - FirebaseAuth: []
+
+components:
+  securitySchemes:
+    FirebaseAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Firebase JWT token obtained from Firebase Authentication.
+        The token is verified server-side and contains user claims including user_id.
+
+  schemas:
+    # ========== Dog Schemas ==========
+    DogSize:
+      type: string
+      enum:
+        - SMALL
+        - MEDIUM
+        - LARGE
+        - XLARGE
+      description: Dog size classification
+
+    VaccinationStatus:
+      type: string
+      enum:
+        - VACCINATED
+        - NOT_VACCINATED
+      description: Dog vaccination status
+
+    DogRequest:
+      type: object
+      required:
+        - name
+        - breed
+        - date_of_birth
+        - size
+        - vaccination_status
+      properties:
+        name:
+          type: string
+          description: Dog's name
+          example: Max
+          minLength: 1
+          maxLength: 100
+        breed:
+          type: string
+          description: Dog breed
+          example: Golden Retriever
+          minLength: 1
+          maxLength: 100
+        date_of_birth:
+          type: string
+          format: date
+          description: Dog's date of birth (ISO 8601 format, cannot be in the future)
+          example: "2020-05-15"
+        size:
+          $ref: '#/components/schemas/DogSize'
+        vaccination_status:
+          $ref: '#/components/schemas/VaccinationStatus'
+        microchipped:
+          type: boolean
+          description: Whether the dog is microchipped
+          default: false
+        special_needs:
+          type: array
+          items:
+            type: string
+          description: List of special needs or requirements
+          example: ["separation anxiety", "food allergies"]
+          default: []
+        medical_notes:
+          type: string
+          description: Medical history and notes
+          example: "Allergic to chicken"
+          default: ""
+        behavior_notes:
+          type: string
+          description: Behavioral observations and notes
+          example: "Friendly with other dogs"
+          default: ""
+        favorite_activities:
+          type: string
+          description: Preferred activities
+          example: "Fetch, swimming"
+          default: ""
+
+    DogResponse:
+      type: object
+      required:
+        - id
+        - name
+        - breed
+        - date_of_birth
+        - age
+        - size
+        - vaccination_status
+        - owner_id
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          description: Unique dog identifier
+          example: dog-123e4567-e89b-12d3-a456-426614174000
+        name:
+          type: string
+          example: Max
+        breed:
+          type: string
+          example: Golden Retriever
+        date_of_birth:
+          type: string
+          format: date
+          example: "2020-05-15"
+        age:
+          type: string
+          description: Calculated age from date of birth
+          example: "4 years, 3 months"
+        size:
+          $ref: '#/components/schemas/DogSize'
+        vaccination_status:
+          $ref: '#/components/schemas/VaccinationStatus'
+        microchipped:
+          type: boolean
+        special_needs:
+          type: array
+          items:
+            type: string
+        medical_notes:
+          type: string
+        behavior_notes:
+          type: string
+        favorite_activities:
+          type: string
+        owner_id:
+          type: string
+          description: Firebase user ID of the owner
+          example: firebase-user-123
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    DogListResponse:
+      type: object
+      required:
+        - dogs
+        - count
+      properties:
+        dogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/DogResponse'
+        count:
+          type: integer
+          description: Number of dogs returned
+          example: 3
+
+    # ========== Owner Schemas ==========
+    OwnerPreferences:
+      type: object
+      properties:
+        notifications:
+          type: boolean
+          description: Enable push notifications
+          default: true
+        marketing_emails:
+          type: boolean
+          description: Receive marketing communications
+          default: false
+        preferred_communication:
+          type: string
+          enum:
+            - email
+            - sms
+            - push
+          default: email
+
+    OwnerProfileRequest:
+      type: object
+      properties:
+        preferences:
+          $ref: '#/components/schemas/OwnerPreferences'
+        notification_settings:
+          type: object
+          description: Granular notification settings
+          additionalProperties: true
+
+    OwnerProfileResponse:
+      type: object
+      required:
+        - user_id
+        - preferences
+        - created_at
+        - updated_at
+      properties:
+        user_id:
+          type: string
+          description: Firebase user ID (not PII)
+          example: firebase-user-123
+        preferences:
+          $ref: '#/components/schemas/OwnerPreferences'
+        notification_settings:
+          type: object
+          additionalProperties: true
+        registration_complete:
+          type: boolean
+          description: Whether profile setup is complete
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ========== Booking Schemas ==========
+    ServiceType:
+      type: string
+      enum:
+        - daycare
+        - boarding
+        - grooming
+        - walking
+        - training
+      description: Type of service being booked
+
+    BookingStatus:
+      type: string
+      enum:
+        - pending
+        - confirmed
+        - in_progress
+        - completed
+        - cancelled
+      description: Current status of the booking
+
+    BookingRequest:
+      type: object
+      required:
+        - dog_id
+        - venue_id
+        - service_type
+        - start_time
+        - end_time
+      properties:
+        dog_id:
+          type: string
+          description: ID of the dog being booked
+          example: dog-123e4567-e89b-12d3-a456-426614174000
+        venue_id:
+          type: string
+          description: ID of the venue
+          example: venue-123e4567-e89b-12d3-a456-426614174000
+        service_type:
+          $ref: '#/components/schemas/ServiceType'
+        start_time:
+          type: string
+          format: date-time
+          description: Booking start time (ISO 8601)
+          example: "2024-01-20T09:00:00Z"
+        end_time:
+          type: string
+          format: date-time
+          description: Booking end time (ISO 8601, must be after start_time)
+          example: "2024-01-20T17:00:00Z"
+        special_instructions:
+          type: string
+          description: Special instructions for the booking
+          example: "Please use the special harness"
+          default: ""
+
+    BookingResponse:
+      type: object
+      required:
+        - id
+        - dog_id
+        - owner_id
+        - venue_id
+        - service_type
+        - start_time
+        - end_time
+        - status
+        - price
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          example: booking-123e4567-e89b-12d3-a456-426614174000
+        dog_id:
+          type: string
+        owner_id:
+          type: string
+        venue_id:
+          type: string
+        service_type:
+          $ref: '#/components/schemas/ServiceType'
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        price:
+          type: number
+          format: float
+          description: Price in GBP calculated from service type and duration
+          example: 120.00
+        special_instructions:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    BookingListResponse:
+      type: object
+      required:
+        - bookings
+        - count
+      properties:
+        bookings:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingResponse'
+        count:
+          type: integer
+          example: 5
+
+    BookingUpdateRequest:
+      type: object
+      properties:
+        service_type:
+          $ref: '#/components/schemas/ServiceType'
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        special_instructions:
+          type: string
+
+    # ========== Venue Schemas ==========
+    OperatingHours:
+      type: object
+      description: Operating hours for each day of the week
+      properties:
+        monday:
+          $ref: '#/components/schemas/DayHours'
+        tuesday:
+          $ref: '#/components/schemas/DayHours'
+        wednesday:
+          $ref: '#/components/schemas/DayHours'
+        thursday:
+          $ref: '#/components/schemas/DayHours'
+        friday:
+          $ref: '#/components/schemas/DayHours'
+        saturday:
+          $ref: '#/components/schemas/DayHours'
+        sunday:
+          $ref: '#/components/schemas/DayHours'
+
+    DayHours:
+      type: object
+      properties:
+        open:
+          type: boolean
+          description: Whether the venue is open on this day
+          default: true
+        start:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          description: Opening time in HH:MM format (24-hour)
+          example: "09:00"
+        end:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          description: Closing time in HH:MM format (24-hour)
+          example: "18:00"
+
+    VenueRequest:
+      type: object
+      required:
+        - name
+        - address
+        - capacity
+        - operating_hours
+      properties:
+        name:
+          type: string
+          description: Venue name
+          example: "Happy Paws Downtown"
+          minLength: 1
+          maxLength: 200
+        address:
+          type: string
+          description: Full venue address
+          example: "123 Main St, London, UK"
+          minLength: 1
+        capacity:
+          type: integer
+          description: Maximum number of dogs that can be accommodated simultaneously
+          minimum: 1
+          example: 20
+        operating_hours:
+          $ref: '#/components/schemas/OperatingHours'
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceType'
+          description: Services offered at this venue
+          default: ["daycare"]
+        slot_duration:
+          type: integer
+          description: Duration of each time slot in minutes
+          default: 60
+          minimum: 15
+          maximum: 240
+
+    VenueResponse:
+      type: object
+      required:
+        - id
+        - name
+        - address
+        - capacity
+        - operating_hours
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          example: venue-123e4567-e89b-12d3-a456-426614174000
+        name:
+          type: string
+        address:
+          type: string
+        capacity:
+          type: integer
+        operating_hours:
+          $ref: '#/components/schemas/OperatingHours'
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceType'
+        slot_duration:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    VenueListResponse:
+      type: object
+      required:
+        - venues
+        - count
+      properties:
+        venues:
+          type: array
+          items:
+            $ref: '#/components/schemas/VenueResponse'
+        count:
+          type: integer
+          example: 10
+
+    # ========== Slot Schemas ==========
+    SlotBatchGenerateRequest:
+      type: object
+      required:
+        - venue_id
+        - start_date
+        - end_date
+      properties:
+        venue_id:
+          type: string
+          description: Venue ID to generate slots for
+          example: venue-123e4567-e89b-12d3-a456-426614174000
+        start_date:
+          type: string
+          format: date
+          description: Start date for slot generation (YYYY-MM-DD)
+          example: "2024-01-01"
+        end_date:
+          type: string
+          format: date
+          description: End date for slot generation (YYYY-MM-DD, must be >= start_date)
+          example: "2024-01-31"
+
+    SlotBatchGenerateResponse:
+      type: object
+      required:
+        - message
+        - venue_id
+        - date_range
+        - slots_created
+      properties:
+        message:
+          type: string
+          example: "Slots generated successfully"
+        venue_id:
+          type: string
+        date_range:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date
+            end:
+              type: string
+              format: date
+        slots_created:
+          type: integer
+          description: Total number of slots created
+          example: 240
+
+    SlotAvailability:
+      type: object
+      required:
+        - time
+        - available
+        - total
+      properties:
+        time:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          description: Time slot in HH:MM format
+          example: "09:00"
+        available:
+          type: integer
+          description: Available capacity for this slot
+          example: 15
+        total:
+          type: integer
+          description: Total capacity for this slot
+          example: 20
+
+    SlotAvailabilityResponse:
+      type: object
+      required:
+        - date
+        - venues_with_availability
+        - total_venues
+      properties:
+        date:
+          type: string
+          format: date
+        venues_with_availability:
+          type: object
+          description: Map of venue IDs to their available slots
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/SlotAvailability'
+        total_venues:
+          type: integer
+          description: Number of venues with availability
+          example: 3
+
+    VenueSlotsResponse:
+      type: object
+      required:
+        - venue_id
+        - date_range
+        - slots
+      properties:
+        venue_id:
+          type: string
+        date_range:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date
+            end:
+              type: string
+              format: date
+        slots:
+          type: object
+          description: Map of dates to slot arrays
+          additionalProperties:
+            type: array
+            items:
+              type: object
+              description: Detailed slot information
+              properties:
+                venue_date:
+                  type: string
+                slot_time:
+                  type: string
+                venue_id:
+                  type: string
+                date:
+                  type: string
+                available_capacity:
+                  type: integer
+                total_capacity:
+                  type: integer
+                booked_count:
+                  type: integer
+                created_at:
+                  type: string
+                  format: date-time
+
+    # ========== Common Schemas ==========
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+          example: "Dog not found"
+
+    ValidationErrorResponse:
+      type: object
+      required:
+        - errors
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  type: string
+                description: Location of the error in the request
+              msg:
+                type: string
+                description: Error message
+              type:
+                type: string
+                description: Error type
+
+    MessageResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: "Operation successful"
+
+paths:
+  # ========== Dog Management Endpoints ==========
+  /dogs:
+    get:
+      tags:
+        - Dogs
+      summary: List all dogs for authenticated user
+      description: |
+        Retrieves all dogs owned by the authenticated user.
+        Uses DynamoDB GSI (owner-index) for efficient querying.
+      operationId: listDogs
+      security:
+        - FirebaseAuth: []
+      responses:
+        '200':
+          description: List of dogs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DogListResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Dogs
+      summary: Register a new dog
+      description: |
+        Creates a new dog profile linked to the authenticated user.
+        Validates that owner profile exists before allowing dog registration.
+        Automatically calculates age from date of birth.
+      operationId: createDog
+      security:
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DogRequest'
+      responses:
+        '201':
+          description: Dog created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DogResponse'
+        '400':
+          description: Invalid request data or owner profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_field:
+                  value:
+                    error: "Missing required field: name"
+                invalid_size:
+                  value:
+                    error: "Invalid size. Must be one of: ['SMALL', 'MEDIUM', 'LARGE', 'XLARGE']"
+                no_profile:
+                  value:
+                    error: "Please complete profile registration first"
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /dogs/{id}:
+    get:
+      tags:
+        - Dogs
+      summary: Get dog by ID
+      description: |
+        Retrieves a specific dog by ID with owner verification.
+        Returns 403 if the dog doesn't belong to the authenticated user.
+      operationId: getDog
+      security:
+        - FirebaseAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Dog ID
+          schema:
+            type: string
+          example: dog-123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '200':
+          description: Dog retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DogResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Access denied - not your dog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Dog not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Dogs
+      summary: Update dog information
+      description: |
+        Updates an existing dog's information with owner verification.
+        Only allows updating specific fields; owner_id cannot be changed.
+      operationId: updateDog
+      security:
+        - FirebaseAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Dog ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                breed:
+                  type: string
+                age:
+                  type: string
+                size:
+                  $ref: '#/components/schemas/DogSize'
+                vaccination_status:
+                  $ref: '#/components/schemas/VaccinationStatus'
+                special_needs:
+                  type: array
+                  items:
+                    type: string
+                medical_notes:
+                  type: string
+                behavior_notes:
+                  type: string
+                favorite_activities:
+                  type: string
+                microchipped:
+                  type: boolean
+      responses:
+        '200':
+          description: Dog updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DogResponse'
+        '400':
+          description: Invalid JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Access denied - not your dog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Dog not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Dogs
+      summary: Delete dog
+      description: |
+        Deletes a dog profile with owner verification.
+        Returns 204 No Content on success.
+      operationId: deleteDog
+      security:
+        - FirebaseAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Dog ID
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Dog deleted successfully
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Access denied - not your dog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Dog not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ========== Owner Management Endpoints ==========
+  /owners/profile:
+    get:
+      tags:
+        - Owners
+      summary: Get owner profile
+      description: |
+        Retrieves the authenticated user's profile (preferences only, no PII).
+        Auto-creates a basic profile if none exists.
+      operationId: getOwnerProfile
+      security:
+        - FirebaseAuth: []
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerProfileResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Owners
+      summary: Update owner profile
+      description: |
+        Updates owner preferences and notification settings.
+        No PII is stored; all identity information comes from Firebase JWT.
+      operationId: updateOwnerProfile
+      security:
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerProfileRequest'
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerProfileResponse'
+        '400':
+          description: Invalid JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /owners/register:
+    post:
+      tags:
+        - Owners
+      summary: Register new owner profile
+      description: |
+        Creates initial owner profile for a new user.
+        Requires email verification via Firebase.
+        Returns 400 if profile already exists.
+      operationId: registerOwner
+      security:
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerProfileRequest'
+      responses:
+        '201':
+          description: Profile created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Profile created successfully"
+                  user_id:
+                    type: string
+                  preferences:
+                    $ref: '#/components/schemas/OwnerPreferences'
+        '400':
+          description: Invalid request or profile already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                already_exists:
+                  value:
+                    error: "Profile already exists"
+                email_not_verified:
+                  value:
+                    error: "Email verification required"
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ========== Booking Management Endpoints ==========
+  /bookings:
+    get:
+      tags:
+        - Bookings
+      summary: List all bookings for authenticated user
+      description: |
+        Retrieves all bookings for the authenticated user.
+        Results are sorted by start_time in descending order.
+      operationId: listBookings
+      security:
+        - FirebaseAuth: []
+      responses:
+        '200':
+          description: Bookings retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingListResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Bookings
+      summary: Create a new booking
+      description: |
+        Creates a new service booking with automatic slot capacity reservation.
+        Validates dog ownership, venue existence, and slot availability.
+        Atomically reserves slot capacity; rolls back on failure.
+        Calculates price based on service type and duration.
+      operationId: createBooking
+      security:
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequest'
+      responses:
+        '201':
+          description: Booking created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '400':
+          description: Invalid request data or no availability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_field:
+                  value:
+                    error: "Missing required field: dog_id"
+                no_availability:
+                  value:
+                    error: "No availability at 09:00 on 2024-01-20"
+                invalid_time:
+                  value:
+                    error: "Start time must be before end time"
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Dog does not belong to this owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Dog, venue, or owner not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error or capacity reservation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /bookings/{id}:
+    get:
+      tags:
+        - Bookings
+      summary: Get booking by ID
+      description: Retrieves a specific booking by ID
+      operationId: getBooking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Booking ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Booking retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Bookings
+      summary: Update booking
+      description: |
+        Updates an existing booking.
+        Note: Changing times does not currently re-check slot availability.
+      operationId: updateBooking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Booking ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingUpdateRequest'
+      responses:
+        '200':
+          description: Booking updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '400':
+          description: Invalid JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Bookings
+      summary: Cancel booking
+      description: |
+        Cancels a booking and releases slot capacity.
+        Sets status to 'cancelled' rather than deleting the record.
+      operationId: cancelBooking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Booking ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Booking cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ========== Venue Management Endpoints ==========
+  /venues:
+    get:
+      tags:
+        - Venues
+      summary: List all venues
+      description: |
+        Retrieves all venues (public endpoint for browsing).
+        Supports optional limit parameter for pagination.
+      operationId: listVenues
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of venues to return
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Venues retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VenueListResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Venues
+      summary: Create a new venue
+      description: |
+        Creates a new venue and auto-generates slots for the next 30 days.
+        Requires valid operating hours for all open days.
+      operationId: createVenue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VenueRequest'
+      responses:
+        '201':
+          description: Venue created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VenueResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_field:
+                  value:
+                    error: "Missing required field: name"
+                invalid_capacity:
+                  value:
+                    error: "Capacity must be a positive integer"
+                invalid_hours:
+                  value:
+                    error: "Invalid operating hours format"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /venues/{id}:
+    get:
+      tags:
+        - Venues
+      summary: Get venue by ID
+      description: Retrieves detailed information about a specific venue
+      operationId: getVenue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Venue ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Venue retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VenueResponse'
+        '404':
+          description: Venue not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Venues
+      summary: Update venue
+      description: |
+        Updates venue information.
+        Note: Changing capacity or operating hours does not update existing slots.
+      operationId: updateVenue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Venue ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                address:
+                  type: string
+                capacity:
+                  type: integer
+                operating_hours:
+                  $ref: '#/components/schemas/OperatingHours'
+                services:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ServiceType'
+                slot_duration:
+                  type: integer
+      responses:
+        '200':
+          description: Venue updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VenueResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Venue not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Venues
+      summary: Delete venue
+      description: |
+        Deletes a venue.
+        Warning: Does not cascade delete slots or bookings.
+      operationId: deleteVenue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Venue ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Venue deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Venue not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ========== Slot Management Endpoints ==========
+  /slots/batch-generate:
+    post:
+      tags:
+        - Slots
+      summary: Batch generate slots for a venue
+      description: |
+        Generates time slots for a venue across a date range.
+        Slots are created based on venue operating hours and capacity.
+        Uses DynamoDB batch writes for efficiency (25 items per batch).
+      operationId: batchGenerateSlots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlotBatchGenerateRequest'
+      responses:
+        '201':
+          description: Slots generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotBatchGenerateResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_field:
+                  value:
+                    error: "Missing required fields: venue_id, start_date, end_date"
+                invalid_date_range:
+                  value:
+                    error: "start_date must be before or equal to end_date"
+                invalid_date_format:
+                  value:
+                    error: "Invalid date format: Use YYYY-MM-DD"
+        '404':
+          description: Venue not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /slots/availability:
+    get:
+      tags:
+        - Slots
+      summary: Query slot availability across venues
+      description: |
+        Retrieves available slots for all venues on a specific date.
+        Uses DynamoDB GSI (date-venue-index) for efficient querying.
+        Only returns slots with available capacity > 0.
+      operationId: queryAvailability
+      parameters:
+        - name: date
+          in: query
+          required: true
+          description: Date to query availability for (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+          example: "2024-01-20"
+        - name: service_type
+          in: query
+          description: Filter by service type (currently informational only)
+          schema:
+            $ref: '#/components/schemas/ServiceType'
+      responses:
+        '200':
+          description: Availability retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotAvailabilityResponse'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_date:
+                  value:
+                    error: "Date parameter required"
+                invalid_format:
+                  value:
+                    error: "Invalid date format. Use YYYY-MM-DD"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /slots/venue/{venue_id}:
+    get:
+      tags:
+        - Slots
+      summary: Get slots for a specific venue in a date range
+      description: |
+        Retrieves all slots for a venue within a date range.
+        If end_date is not provided, defaults to start_date (single day).
+      operationId: getVenueSlotsRange
+      parameters:
+        - name: venue_id
+          in: path
+          required: true
+          description: Venue ID
+          schema:
+            type: string
+        - name: start_date
+          in: query
+          required: true
+          description: Start date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          description: End date (YYYY-MM-DD), defaults to start_date if not provided
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Slots retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VenueSlotsResponse'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_venue:
+                  value:
+                    error: "venue_id is required"
+                missing_date:
+                  value:
+                    error: "start_date parameter required"
+                invalid_format:
+                  value:
+                    error: "Invalid date format: Use YYYY-MM-DD"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ========== Documentation Endpoints ==========
+  /docs:
+    get:
+      tags:
+        - Documentation
+      summary: API documentation UI
+      description: Serves interactive API documentation (Swagger UI)
+      operationId: getDocs
+      security: []
+      responses:
+        '200':
+          description: HTML documentation page
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /openapi.json:
+    get:
+      tags:
+        - Documentation
+      summary: OpenAPI specification
+      description: Returns the OpenAPI specification in JSON format
+      operationId: getOpenApiSpec
+      security: []
+      responses:
+        '200':
+          description: OpenAPI specification
+          content:
+            application/json:
+              schema:
+                type: object

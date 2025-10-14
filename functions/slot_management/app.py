@@ -5,7 +5,17 @@ import decimal
 from datetime import datetime, timezone, timedelta, date
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
+from pydantic import ValidationError
 import logging
+import sys
+
+sys.path.append("/opt/python")
+from models import (
+    SlotBatchGenerateRequest,
+    SlotBatchGenerateResponse,
+    SlotAvailabilityResponse,
+    ErrorResponse,
+)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -49,12 +59,17 @@ def batch_generate_slots(slots_table, venues_table, event):
     """
     try:
         body = json.loads(event.get("body", "{}"))
-        venue_id = body.get("venue_id")
-        start_date_str = body.get("start_date")
-        end_date_str = body.get("end_date")
 
-        if not all([venue_id, start_date_str, end_date_str]):
-            return create_response(400, {"error": "Missing required fields: venue_id, start_date, end_date"})
+        # Validate with Pydantic model
+        try:
+            slot_request = SlotBatchGenerateRequest(**body)
+        except ValidationError as e:
+            logger.warning(f"Validation error: {e.errors()}")
+            return create_response(422, {"errors": e.errors()})
+
+        venue_id = slot_request.venue_id
+        start_date_str = slot_request.start_date
+        end_date_str = slot_request.end_date
 
         # Get venue details
         venue_response = venues_table.get_item(Key={"id": venue_id})

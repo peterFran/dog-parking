@@ -5,12 +5,18 @@ import os
 import decimal
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
+from pydantic import ValidationError
 import logging
 import re
 import sys
 
 sys.path.append("/opt/python")
 from auth import require_auth, optional_auth, get_user_id_from_event, is_user_verified
+from models import (
+    OwnerProfileRequest,
+    OwnerProfileResponse,
+    ErrorResponse,
+)
 
 # Configure logging
 logger = logging.getLogger()
@@ -101,6 +107,13 @@ def update_owner_profile(table, event):
         # Parse request body
         body = json.loads(event.get("body", "{}"))
 
+        # Validate with Pydantic model
+        try:
+            profile_request = OwnerProfileRequest(**body)
+        except ValidationError as e:
+            logger.warning(f"Validation error: {e.errors()}")
+            return create_response(422, {"errors": e.errors()})
+
         # Get user_id from authenticated claims
         user_id = get_user_id_from_event(event)
 
@@ -110,31 +123,32 @@ def update_owner_profile(table, event):
         # Check if profile exists
         existing_profile = table.get_item(Key={"user_id": user_id})
 
+        # If profile doesn't exist, create it
+        if "Item" not in existing_profile:
+            profile_data = {
+                "user_id": user_id,
+                "preferences": profile_request.preferences.model_dump() if profile_request.preferences else {"notifications": True, "marketing_emails": False},
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            if profile_request.notification_settings:
+                profile_data["notification_settings"] = profile_request.notification_settings
+
+            table.put_item(Item=profile_data)
+            return create_response(200, profile_data)
+
         # Build update expression
         update_expression = "SET updated_at = :updated_at"
         expression_values = {":updated_at": datetime.now(timezone.utc).isoformat()}
 
         # Update allowed fields (only non-PII preferences)
-        allowed_fields = ["preferences", "notification_settings"]
+        if profile_request.preferences:
+            update_expression += ", preferences = :preferences"
+            expression_values[":preferences"] = profile_request.preferences.model_dump()
 
-        for field in allowed_fields:
-            if field in body:
-                update_expression += f", {field} = :{field}"
-                expression_values[f":{field}"] = body[field]
-
-        # If profile doesn't exist, create it
-        if "Item" not in existing_profile:
-            profile_data = {
-                "user_id": user_id,
-                "preferences": body.get(
-                    "preferences", {"notifications": True, "marketing_emails": False}
-                ),
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-
-            table.put_item(Item=profile_data)
-            return create_response(200, profile_data)
+        if profile_request.notification_settings:
+            update_expression += ", notification_settings = :notification_settings"
+            expression_values[":notification_settings"] = profile_request.notification_settings
 
         # Update existing profile
         response = table.update_item(
@@ -171,6 +185,13 @@ def register_owner(table, event):
         # Parse request body for preferences
         body = json.loads(event.get("body", "{}"))
 
+        # Validate with Pydantic model (optional for register)
+        try:
+            profile_request = OwnerProfileRequest(**body) if body else None
+        except ValidationError as e:
+            logger.warning(f"Validation error: {e.errors()}")
+            return create_response(422, {"errors": e.errors()})
+
         # Check if profile already exists
         existing_profile = table.get_item(Key={"user_id": user_id})
 
@@ -182,14 +203,11 @@ def register_owner(table, event):
 
         owner_profile = {
             "user_id": user_id,  # Google user ID (not PII)
-            "preferences": body.get(
-                "preferences",
-                {
-                    "notifications": True,
-                    "marketing_emails": False,
-                    "preferred_communication": "email",
-                },
-            ),
+            "preferences": profile_request.preferences.model_dump() if profile_request and profile_request.preferences else {
+                "notifications": True,
+                "marketing_emails": False,
+                "preferred_communication": "email",
+            },
             "registration_complete": True,
             "created_at": now,
             "updated_at": now,
