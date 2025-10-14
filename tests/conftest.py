@@ -1,7 +1,14 @@
 import pytest
 import os
+import sys
 import boto3
 from moto import mock_aws
+
+# Add functions/shared to Python path so models can be imported
+# This simulates the Lambda Layer path (/opt/python)
+shared_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'functions', 'shared')
+if shared_path not in sys.path:
+    sys.path.insert(0, shared_path)
 
 
 @pytest.fixture
