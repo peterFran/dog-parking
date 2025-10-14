@@ -82,7 +82,13 @@ def create_venue(table, dynamodb, event):
             venue_request = VenueRequest(**body)
         except ValidationError as e:
             logger.warning(f"Validation error: {e.errors()}")
-            return create_response(422, {"errors": e.errors()})
+            # Format Pydantic errors into a simple error message for backward compatibility
+            error_messages = []
+            for error in e.errors():
+                field = error['loc'][0] if error['loc'] else 'field'
+                msg = error['msg']
+                error_messages.append(f"{field}: {msg}")
+            return create_response(422, {"error": "; ".join(error_messages)})
 
         # Create venue record
         venue_id = f"venue-{uuid.uuid4()}"
@@ -93,8 +99,8 @@ def create_venue(table, dynamodb, event):
             "name": venue_request.name,
             "address": venue_request.address,
             "capacity": venue_request.capacity,
-            "operating_hours": venue_request.operating_hours.model_dump(),
-            "services": [s.value for s in venue_request.services] if venue_request.services else ["daycare"],
+            "operating_hours": venue_request.operating_hours.model_dump(mode='json'),
+            "services": [s.value if hasattr(s, 'value') else s for s in venue_request.services] if venue_request.services else ["daycare"],
             "slot_duration": venue_request.slot_duration,
             "created_at": now,
             "updated_at": now,

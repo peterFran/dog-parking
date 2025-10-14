@@ -145,7 +145,13 @@ def create_dog(dogs_table, owners_table, event):
             dog_request = DogRequest(**body)
         except ValidationError as e:
             logger.warning(f"Validation error: {e.errors()}")
-            return create_response(422, {"errors": e.errors()})
+            # Format Pydantic errors into a simple error message for backward compatibility
+            error_messages = []
+            for error in e.errors():
+                field = error['loc'][0] if error['loc'] else 'field'
+                msg = error['msg']
+                error_messages.append(f"{field}: {msg}")
+            return create_response(422, {"error": "; ".join(error_messages)})
 
         # Verify user profile exists
         owner_response = owners_table.get_item(Key={"user_id": user_id})

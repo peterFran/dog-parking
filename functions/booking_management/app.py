@@ -139,7 +139,13 @@ def create_booking_with_auth(
             booking_request = BookingRequest(**body)
         except ValidationError as e:
             logger.warning(f"Validation error: {e.errors()}")
-            return create_response(422, {"errors": e.errors()})
+            # Format Pydantic errors into a simple error message for backward compatibility
+            error_messages = []
+            for error in e.errors():
+                field = error['loc'][0] if error['loc'] else 'field'
+                msg = error['msg']
+                error_messages.append(f"{field}: {msg}")
+            return create_response(422, {"error": "; ".join(error_messages)})
 
         # Parse datetimes for comparison
         start_time = booking_request.start_time.replace(tzinfo=timezone.utc)

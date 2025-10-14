@@ -134,6 +134,7 @@ class TestSlotManagement:
 
         response = query_availability(mock_slots_table, event)
 
+        # Business logic validation returns 400
         assert response["statusCode"] == 400
         body = json.loads(response["body"])
         assert "Date parameter required" in body["error"]
@@ -179,9 +180,9 @@ class TestSlotManagement:
 
         response = batch_generate_slots(mock_slots_table, mock_venues_table, event)
 
-        assert response["statusCode"] == 400
+        assert response["statusCode"] == 422
         body = json.loads(response["body"])
-        assert "Missing required fields" in body["error"]
+        assert "Field required" in body["error"]
 
     def test_batch_generate_venue_not_found(self, mock_slots_table, mock_venues_table):
         """Test batch generation with non-existent venue"""
@@ -219,6 +220,7 @@ class TestSlotManagement:
 
         response = batch_generate_slots(mock_slots_table, mock_venues_table, event)
 
+        # Business logic validation returns 400 (not Pydantic validation)
         assert response["statusCode"] == 400
         body = json.loads(response["body"])
         assert "start_date must be before or equal to end_date" in body["error"]
@@ -239,9 +241,10 @@ class TestSlotManagement:
 
         response = batch_generate_slots(mock_slots_table, mock_venues_table, event)
 
-        assert response["statusCode"] == 400
+        # Pydantic validation error returns 422
+        assert response["statusCode"] == 422
         body = json.loads(response["body"])
-        assert "Invalid date format" in body["error"]
+        assert "start_date:" in body["error"] or "end_date:" in body["error"]
 
     def test_query_availability_invalid_date_format(self, mock_slots_table):
         """Test availability query with invalid date format"""
@@ -253,6 +256,7 @@ class TestSlotManagement:
 
         response = query_availability(mock_slots_table, event)
 
+        # Business logic validation returns 400
         assert response["statusCode"] == 400
         body = json.loads(response["body"])
         assert "Invalid date format" in body["error"]

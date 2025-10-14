@@ -35,12 +35,7 @@ class TestVenueManagement:
         """Sample venue data for testing"""
         return {
             "name": "Downtown Dog Care",
-            "address": {
-                "street": "123 Main St",
-                "city": "New York",
-                "state": "NY",
-                "zip": "10001",
-            },
+            "address": "123 Main St, New York, NY 10001",
             "capacity": 20,
             "operating_hours": {
                 "monday": {"open": True, "start": "08:00", "end": "18:00"},
@@ -82,9 +77,9 @@ class TestVenueManagement:
 
         response = create_venue(mock_table, mock_dynamodb, event)
 
-        assert response["statusCode"] == 400
+        assert response["statusCode"] == 422
         body = json.loads(response["body"])
-        assert "Missing required field" in body["error"]
+        assert "Field required" in body["error"]
 
     def test_create_venue_invalid_capacity(self, mock_table, sample_venue_data):
         """Test venue creation with invalid capacity"""
@@ -95,9 +90,9 @@ class TestVenueManagement:
 
         response = create_venue(mock_table, mock_dynamodb, event)
 
-        assert response["statusCode"] == 400
+        assert response["statusCode"] == 422
         body = json.loads(response["body"])
-        assert "positive integer" in body["error"]
+        assert "capacity:" in body["error"] and ("greater than 0" in body["error"] or "Input should be" in body["error"])
 
     def test_get_venue_success(self, mock_table):
         """Test successful venue retrieval"""
@@ -336,7 +331,7 @@ class TestVenueManagement:
             "body": json.dumps(
                 {
                     "name": "Test Venue",
-                    "address": {"street": "123 Test St"},
+                    "address": "123 Test St, New York, NY 10001",  # Fixed: address should be string
                     "capacity": 20,
                     "operating_hours": {
                         "monday": {"open": True, "start": "08:00", "end": "18:00"}

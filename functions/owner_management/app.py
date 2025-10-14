@@ -112,7 +112,13 @@ def update_owner_profile(table, event):
             profile_request = OwnerProfileRequest(**body)
         except ValidationError as e:
             logger.warning(f"Validation error: {e.errors()}")
-            return create_response(422, {"errors": e.errors()})
+            # Format Pydantic errors into a simple error message for backward compatibility
+            error_messages = []
+            for error in e.errors():
+                field = error['loc'][0] if error['loc'] else 'field'
+                msg = error['msg']
+                error_messages.append(f"{field}: {msg}")
+            return create_response(422, {"error": "; ".join(error_messages)})
 
         # Get user_id from authenticated claims
         user_id = get_user_id_from_event(event)
@@ -127,7 +133,7 @@ def update_owner_profile(table, event):
         if "Item" not in existing_profile:
             profile_data = {
                 "user_id": user_id,
-                "preferences": profile_request.preferences.model_dump() if profile_request.preferences else {"notifications": True, "marketing_emails": False},
+                "preferences": profile_request.preferences.model_dump(mode='json') if profile_request.preferences else {"notifications": True, "marketing_emails": False},
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -144,7 +150,7 @@ def update_owner_profile(table, event):
         # Update allowed fields (only non-PII preferences)
         if profile_request.preferences:
             update_expression += ", preferences = :preferences"
-            expression_values[":preferences"] = profile_request.preferences.model_dump()
+            expression_values[":preferences"] = profile_request.preferences.model_dump(mode='json')
 
         if profile_request.notification_settings:
             update_expression += ", notification_settings = :notification_settings"
@@ -190,7 +196,13 @@ def register_owner(table, event):
             profile_request = OwnerProfileRequest(**body) if body else None
         except ValidationError as e:
             logger.warning(f"Validation error: {e.errors()}")
-            return create_response(422, {"errors": e.errors()})
+            # Format Pydantic errors into a simple error message for backward compatibility
+            error_messages = []
+            for error in e.errors():
+                field = error['loc'][0] if error['loc'] else 'field'
+                msg = error['msg']
+                error_messages.append(f"{field}: {msg}")
+            return create_response(422, {"error": "; ".join(error_messages)})
 
         # Check if profile already exists
         existing_profile = table.get_item(Key={"user_id": user_id})
@@ -203,7 +215,7 @@ def register_owner(table, event):
 
         owner_profile = {
             "user_id": user_id,  # Google user ID (not PII)
-            "preferences": profile_request.preferences.model_dump() if profile_request and profile_request.preferences else {
+            "preferences": profile_request.preferences.model_dump(mode='json') if profile_request and profile_request.preferences else {
                 "notifications": True,
                 "marketing_emails": False,
                 "preferred_communication": "email",
