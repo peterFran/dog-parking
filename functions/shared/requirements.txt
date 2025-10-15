@@ -1,2 +1,1 @@
 pydantic==2.9.0
-pydantic-core==2.23.0
