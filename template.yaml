@@ -21,6 +21,7 @@ Globals:
     Runtime: python3.13
     Layers:
       - !Ref AuthLayer
+      - !Ref ModelsLayer
     Environment:
       Variables:
         ENVIRONMENT: !Ref Environment
@@ -44,6 +45,19 @@ Resources:
       LayerName: !Sub "auth-layer-${Environment}"
       Description: Authentication layer with Google Firebase JWT verification
       ContentUri: functions/auth/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: python3.13
+
+  # Lambda Layer for Shared Pydantic Models
+  ModelsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub "models-layer-${Environment}"
+      Description: Shared Pydantic models generated from OpenAPI specification
+      ContentUri: functions/shared/
       CompatibleRuntimes:
         - python3.13
       RetentionPolicy: Delete

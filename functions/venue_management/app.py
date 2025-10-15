@@ -5,7 +5,17 @@ import os
 import decimal
 from datetime import datetime, timezone, timedelta
 from botocore.exceptions import ClientError
+from pydantic import ValidationError
 import logging
+import sys
+
+sys.path.append("/opt/python")
+from models import (
+    VenueRequest,
+    VenueResponse,
+    VenueListResponse,
+    ErrorResponse,
+)
 
 # Configure logging
 logger = logging.getLogger()
@@ -67,23 +77,18 @@ def create_venue(table, dynamodb, event):
         # Parse request body
         body = json.loads(event.get("body", "{}"))
 
-        # Validate required fields
-        required_fields = ["name", "address", "capacity", "operating_hours"]
-        for field in required_fields:
-            if field not in body:
-                return create_response(
-                    400, {"error": f"Missing required field: {field}"}
-                )
-
-        # Validate capacity
-        if not isinstance(body["capacity"], int) or body["capacity"] < 1:
-            return create_response(
-                400, {"error": "Capacity must be a positive integer"}
-            )
-
-        # Validate operating hours
-        if not validate_operating_hours(body["operating_hours"]):
-            return create_response(400, {"error": "Invalid operating hours format"})
+        # Validate with Pydantic model - replaces all manual validation!
+        try:
+            venue_request = VenueRequest(**body)
+        except ValidationError as e:
+            logger.warning(f"Validation error: {e.errors()}")
+            # Format Pydantic errors into a simple error message for backward compatibility
+            error_messages = []
+            for error in e.errors():
+                field = error['loc'][0] if error['loc'] else 'field'
+                msg = error['msg']
+                error_messages.append(f"{field}: {msg}")
+            return create_response(422, {"error": "; ".join(error_messages)})
 
         # Create venue record
         venue_id = f"venue-{uuid.uuid4()}"
@@ -91,12 +96,12 @@ def create_venue(table, dynamodb, event):
 
         venue_item = {
             "id": venue_id,
-            "name": body["name"],
-            "address": body["address"],
-            "capacity": body["capacity"],
-            "operating_hours": body["operating_hours"],
-            "services": body.get("services", ["daycare"]),
-            "slot_duration": body.get("slot_duration", 60),  # Default 60 minutes
+            "name": venue_request.name,
+            "address": venue_request.address,
+            "capacity": venue_request.capacity,
+            "operating_hours": venue_request.operating_hours.model_dump(mode='json'),
+            "services": [s.value if hasattr(s, 'value') else s for s in venue_request.services] if venue_request.services else ["daycare"],
+            "slot_duration": venue_request.slot_duration,
             "created_at": now,
             "updated_at": now,
         }

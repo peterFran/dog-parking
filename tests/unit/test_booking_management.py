@@ -576,9 +576,9 @@ def test_missing_required_fields():
     ):
         response = lambda_handler(event, None)
 
-    assert response["statusCode"] == 400
+    assert response["statusCode"] == 422
     body = json.loads(response["body"])
-    assert "Missing required field" in body["error"]
+    assert "Field required" in body["error"]
 
 
 @mock_aws
@@ -685,9 +685,9 @@ def test_invalid_service_type():
     ):
         response = lambda_handler(event, None)
 
-    assert response["statusCode"] == 400
+    assert response["statusCode"] == 422
     body = json.loads(response["body"])
-    assert "Invalid service type" in body["error"]
+    assert "service_type:" in body["error"] and "Input should be" in body["error"]
 
 
 @mock_aws
@@ -774,9 +774,9 @@ def test_invalid_datetime():
     ):
         response = lambda_handler(event, None)
 
-    assert response["statusCode"] == 400
+    assert response["statusCode"] == 422
     body = json.loads(response["body"])
-    assert "Invalid datetime format" in body["error"]
+    assert "start_time:" in body["error"] or "end_time:" in body["error"]
 
 
 @mock_aws

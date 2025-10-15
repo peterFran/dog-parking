@@ -5,7 +5,17 @@ import decimal
 from datetime import datetime, timezone, timedelta, date
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
+from pydantic import ValidationError
 import logging
+import sys
+
+sys.path.append("/opt/python")
+from models import (
+    SlotBatchGenerateRequest,
+    SlotBatchGenerateResponse,
+    SlotAvailabilityResponse,
+    ErrorResponse,
+)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -49,12 +59,24 @@ def batch_generate_slots(slots_table, venues_table, event):
     """
     try:
         body = json.loads(event.get("body", "{}"))
-        venue_id = body.get("venue_id")
-        start_date_str = body.get("start_date")
-        end_date_str = body.get("end_date")
 
-        if not all([venue_id, start_date_str, end_date_str]):
-            return create_response(400, {"error": "Missing required fields: venue_id, start_date, end_date"})
+        # Validate with Pydantic model
+        try:
+            slot_request = SlotBatchGenerateRequest(**body)
+        except ValidationError as e:
+            logger.warning(f"Validation error: {e.errors()}")
+            # Format Pydantic errors into a simple error message for backward compatibility
+            error_messages = []
+            for error in e.errors():
+                field = error['loc'][0] if error['loc'] else 'field'
+                msg = error['msg']
+                error_messages.append(f"{field}: {msg}")
+            return create_response(422, {"error": "; ".join(error_messages)})
+
+        venue_id = slot_request.venue_id
+        # Pydantic already parsed these as date objects
+        start_date = slot_request.start_date
+        end_date = slot_request.end_date
 
         # Get venue details
         venue_response = venues_table.get_item(Key={"id": venue_id})
@@ -62,10 +84,6 @@ def batch_generate_slots(slots_table, venues_table, event):
             return create_response(404, {"error": "Venue not found"})
 
         venue = venue_response["Item"]
-
-        # Parse dates
-        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
 
         if start_date > end_date:
             return create_response(400, {"error": "start_date must be before or equal to end_date"})
@@ -100,7 +118,7 @@ def batch_generate_slots(slots_table, venues_table, event):
         return create_response(201, {
             "message": "Slots generated successfully",
             "venue_id": venue_id,
-            "date_range": {"start": start_date_str, "end": end_date_str},
+            "date_range": {"start": start_date.strftime("%Y-%m-%d"), "end": end_date.strftime("%Y-%m-%d")},
             "slots_created": slots_created
         })
 

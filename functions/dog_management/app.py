@@ -3,13 +3,20 @@ import boto3
 import uuid
 import os
 import decimal
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from botocore.exceptions import ClientError
+from pydantic import ValidationError
 import logging
 import sys
 
 sys.path.append("/opt/python")
 from auth import require_auth, optional_auth, get_user_id_from_event
+from models import (
+    DogRequest,
+    DogResponse,
+    DogListResponse,
+    ErrorResponse,
+)
 
 # Configure logging
 logger = logging.getLogger()
@@ -133,13 +140,18 @@ def create_dog(dogs_table, owners_table, event):
         # Parse request body
         body = json.loads(event.get("body", "{}"))
 
-        # Validate required fields
-        required_fields = ["name", "breed", "date_of_birth", "size", "vaccination_status"]
-        for field in required_fields:
-            if field not in body:
-                return create_response(
-                    400, {"error": f"Missing required field: {field}"}
-                )
+        # Validate with Pydantic model - replaces all manual validation!
+        try:
+            dog_request = DogRequest(**body)
+        except ValidationError as e:
+            logger.warning(f"Validation error: {e.errors()}")
+            # Format Pydantic errors into a simple error message for backward compatibility
+            error_messages = []
+            for error in e.errors():
+                field = error['loc'][0] if error['loc'] else 'field'
+                msg = error['msg']
+                error_messages.append(f"{field}: {msg}")
+            return create_response(422, {"error": "; ".join(error_messages)})
 
         # Verify user profile exists
         owner_response = owners_table.get_item(Key={"user_id": user_id})
@@ -148,33 +160,13 @@ def create_dog(dogs_table, owners_table, event):
                 400, {"error": "Please complete profile registration first"}
             )
 
-        # Validate date_of_birth
-        try:
-            birth_date = datetime.fromisoformat(body["date_of_birth"].replace('Z', '+00:00'))
-            # Ensure birth_date is timezone-aware
-            if birth_date.tzinfo is None:
-                birth_date = birth_date.replace(tzinfo=timezone.utc)
-            if birth_date > datetime.now(timezone.utc):
-                return create_response(400, {"error": "Birth date cannot be in the future"})
-        except ValueError:
-            return create_response(400, {"error": "Invalid date_of_birth format. Use YYYY-MM-DD"})
-
-        # Validate size
-        valid_sizes = ["SMALL", "MEDIUM", "LARGE", "XLARGE"]
-        if body["size"] not in valid_sizes:
-            return create_response(
-                400, {"error": f"Invalid size. Must be one of: {valid_sizes}"}
-            )
-
-        # Validate vaccination_status
-        valid_vaccination_status = ["VACCINATED", "NOT_VACCINATED"]
-        if body["vaccination_status"] not in valid_vaccination_status:
-            return create_response(
-                400, {"error": f"Invalid vaccination_status. Must be one of: {valid_vaccination_status}"}
-            )
+        # Check if birth date is in the future
+        if dog_request.date_of_birth > date.today():
+            return create_response(400, {"error": "Birth date cannot be in the future"})
 
         # Calculate age from date_of_birth
-        today = datetime.now(timezone.utc)
+        today = datetime.now(timezone.utc).date()
+        birth_date = dog_request.date_of_birth
         age_months = (today.year - birth_date.year) * 12 + (today.month - birth_date.month)
 
         if age_months < 12:
@@ -193,18 +185,18 @@ def create_dog(dogs_table, owners_table, event):
 
         dog_item = {
             "id": dog_id,
-            "name": body["name"],
-            "breed": body["breed"],
-            "date_of_birth": body["date_of_birth"],
-            "age": calculated_age,  # Calculated from date_of_birth
-            "size": body["size"],
-            "vaccination_status": body["vaccination_status"],
-            "microchipped": body.get("microchipped", False),
-            "special_needs": body.get("special_needs", []),
-            "medical_notes": body.get("medical_notes", ""),
-            "behavior_notes": body.get("behavior_notes", ""),
-            "favorite_activities": body.get("favorite_activities", ""),
-            "owner_id": user_id,  # Use authenticated user_id
+            "name": dog_request.name,
+            "breed": dog_request.breed,
+            "date_of_birth": dog_request.date_of_birth.isoformat(),
+            "age": calculated_age,
+            "size": dog_request.size.value,  # Enum value
+            "vaccination_status": dog_request.vaccination_status.value,  # Enum value
+            "microchipped": dog_request.microchipped,
+            "special_needs": dog_request.special_needs,
+            "medical_notes": dog_request.medical_notes,
+            "behavior_notes": dog_request.behavior_notes,
+            "favorite_activities": dog_request.favorite_activities,
+            "owner_id": user_id,
             "created_at": now,
             "updated_at": now,
         }
@@ -216,8 +208,6 @@ def create_dog(dogs_table, owners_table, event):
 
     except json.JSONDecodeError:
         return create_response(400, {"error": "Invalid JSON in request body"})
-    except ValueError as e:
-        return create_response(400, {"error": str(e)})
     except ClientError as e:
         logger.error(f"Error creating dog: {str(e)}")
         return create_response(500, {"error": "Failed to create dog"})
@@ -265,19 +255,32 @@ def update_dog(table, dog_id, event):
         ]
         for field in allowed_fields:
             if field in body:
+                value = body[field]
+                # Handle enum fields
+                if field in ["size", "vaccination_status"]:
+                    # Validate enum values
+                    if field == "size":
+                        valid_sizes = ["SMALL", "MEDIUM", "LARGE", "XLARGE"]
+                        if value not in valid_sizes:
+                            return create_response(400, {"error": f"Invalid size. Must be one of: {valid_sizes}"})
+                    elif field == "vaccination_status":
+                        valid_statuses = ["VACCINATED", "NOT_VACCINATED"]
+                        if value not in valid_statuses:
+                            return create_response(400, {"error": f"Invalid vaccination_status. Must be one of: {valid_statuses}"})
+
                 if field == "name":
                     # Handle reserved keyword
                     update_expression += f", #name = :name"
                     expression_names["#name"] = "name"
-                    expression_values[":name"] = body[field]
+                    expression_values[":name"] = value
                 elif field == "size":
                     # Handle reserved keyword
                     update_expression += f", #size = :size"
                     expression_names["#size"] = "size"
-                    expression_values[":size"] = body[field]
+                    expression_values[":size"] = value
                 else:
                     update_expression += f", {field} = :{field}"
-                    expression_values[f":{field}"] = body[field]
+                    expression_values[f":{field}"] = value
 
         # Update the item
         kwargs = {
@@ -329,20 +332,6 @@ def delete_dog(table, dog_id, event):
     except ClientError as e:
         logger.error(f"Error deleting dog: {str(e)}")
         return create_response(500, {"error": "Failed to delete dog"})
-
-
-# def create_response(status_code, body):
-#     """Create a standardized API response"""
-#     return {
-#         "statusCode": status_code,
-#         "headers": {
-#             "Content-Type": "application/json",
-#             "Access-Control-Allow-Origin": "*",
-#             "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-#             "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-#         },
-#         "body": json.dumps(body) if body else "",
-#     }
 
 
 def create_response(status_code, body):

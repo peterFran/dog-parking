@@ -515,9 +515,9 @@ def test_invalid_size():
     ):
         response = lambda_handler(event, None)
 
-    assert response["statusCode"] == 400
+    assert response["statusCode"] == 422
     body = json.loads(response["body"])
-    assert "Invalid size" in body["error"]
+    assert "size:" in body["error"] and "Input should be" in body["error"]
 
 
 def test_invalid_json():

@@ -5,11 +5,19 @@ import os
 import decimal
 from datetime import datetime, timezone, timedelta
 from botocore.exceptions import ClientError
+from pydantic import ValidationError
 import logging
 import sys
 
 sys.path.append("/opt/python")
 from auth import require_auth, optional_auth, get_user_id_from_event
+from models import (
+    BookingRequest,
+    BookingResponse,
+    BookingListResponse,
+    BookingUpdateRequest,
+    ErrorResponse,
+)
 
 # Configure logging
 logger = logging.getLogger()
@@ -126,22 +134,29 @@ def create_booking_with_auth(
         # Parse request body
         body = json.loads(event.get("body", "{}"))
 
-        # Validate required fields (owner_id not needed - comes from auth)
-        required_fields = [
-            "dog_id",
-            "venue_id",
-            "service_type",
-            "start_time",
-            "end_time",
-        ]
-        for field in required_fields:
-            if field not in body:
-                return create_response(
-                    400, {"error": f"Missing required field: {field}"}
-                )
+        # Validate with Pydantic model - replaces manual validation!
+        try:
+            booking_request = BookingRequest(**body)
+        except ValidationError as e:
+            logger.warning(f"Validation error: {e.errors()}")
+            # Format Pydantic errors into a simple error message for backward compatibility
+            error_messages = []
+            for error in e.errors():
+                field = error['loc'][0] if error['loc'] else 'field'
+                msg = error['msg']
+                error_messages.append(f"{field}: {msg}")
+            return create_response(422, {"error": "; ".join(error_messages)})
+
+        # Parse datetimes for comparison
+        start_time = booking_request.start_time.replace(tzinfo=timezone.utc)
+        end_time = booking_request.end_time.replace(tzinfo=timezone.utc)
+
+        # Additional validation: start must be before end
+        if start_time >= end_time:
+            return create_response(400, {"error": "Start time must be before end time"})
 
         # Verify dog exists and belongs to authenticated user
-        dog_response = dogs_table.get_item(Key={"id": body["dog_id"]})
+        dog_response = dogs_table.get_item(Key={"id": booking_request.dog_id})
         if "Item" not in dog_response:
             return create_response(404, {"error": "Dog not found"})
 
@@ -155,37 +170,13 @@ def create_booking_with_auth(
             return create_response(404, {"error": "Owner profile not found"})
 
         # Verify venue exists
-        venue_response = venues_table.get_item(Key={"id": body["venue_id"]})
+        venue_response = venues_table.get_item(Key={"id": booking_request.venue_id})
         if "Item" not in venue_response:
             return create_response(404, {"error": "Venue not found"})
 
-        venue = venue_response["Item"]
-
-        # Validate service type
-        valid_services = ["daycare", "boarding", "grooming", "walking", "training"]
-        if body["service_type"] not in valid_services:
-            return create_response(
-                400,
-                {"error": f"Invalid service type. Must be one of: {valid_services}"},
-            )
-
-        # Validate datetime format
-        try:
-            start_time = datetime.fromisoformat(
-                body["start_time"].replace("Z", "+00:00")
-            )
-            end_time = datetime.fromisoformat(body["end_time"].replace("Z", "+00:00"))
-        except ValueError:
-            return create_response(
-                400, {"error": "Invalid datetime format. Use ISO format."}
-            )
-
-        if start_time >= end_time:
-            return create_response(400, {"error": "Start time must be before end time"})
-
         # Reserve slot capacity atomically
         try:
-            reserve_result = reserve_slot_capacity(slots_table, body["venue_id"], start_time, end_time)
+            reserve_result = reserve_slot_capacity(slots_table, booking_request.venue_id, start_time, end_time)
             if not reserve_result["success"]:
                 return create_response(400, {"error": reserve_result["message"]})
         except ClientError as e:
@@ -193,7 +184,7 @@ def create_booking_with_auth(
             return create_response(500, {"error": "Booking failed - capacity unavailable"})
 
         # Calculate price based on service type and duration
-        price = calculate_price(body["service_type"], start_time, end_time)
+        price = calculate_price(booking_request.service_type.value, start_time, end_time)
 
         # Create booking record
         booking_id = f"booking-{uuid.uuid4()}"
@@ -201,15 +192,15 @@ def create_booking_with_auth(
 
         booking_item = {
             "id": booking_id,
-            "dog_id": body["dog_id"],
-            "owner_id": user_id,  # Use authenticated user ID
-            "venue_id": body["venue_id"],
-            "service_type": body["service_type"],
-            "start_time": body["start_time"],
-            "end_time": body["end_time"],
+            "dog_id": booking_request.dog_id,
+            "owner_id": user_id,
+            "venue_id": booking_request.venue_id,
+            "service_type": booking_request.service_type.value,  # Enum value
+            "start_time": booking_request.start_time.isoformat(),
+            "end_time": booking_request.end_time.isoformat(),
             "status": "pending",
             "price": decimal.Decimal(str(price)),
-            "special_instructions": body.get("special_instructions", ""),
+            "special_instructions": booking_request.special_instructions,
             "created_at": now,
             "updated_at": now,
         }
@@ -252,14 +243,25 @@ def update_booking(table, booking_id, event):
         ]
         for field in allowed_fields:
             if field in body:
+                value = body[field]
+                # Validate enums
+                if field == "service_type":
+                    valid_services = ["daycare", "boarding", "grooming", "walking", "training"]
+                    if value not in valid_services:
+                        return create_response(400, {"error": f"Invalid service type. Must be one of: {valid_services}"})
+                elif field == "status":
+                    valid_statuses = ["pending", "confirmed", "in_progress", "completed", "cancelled"]
+                    if value not in valid_statuses:
+                        return create_response(400, {"error": f"Invalid status. Must be one of: {valid_statuses}"})
+
                 if field == "status":
                     # Handle reserved keyword
                     update_expression += f", #status = :status"
                     expression_names["#status"] = "status"
-                    expression_values[":status"] = body[field]
+                    expression_values[":status"] = value
                 else:
                     update_expression += f", {field} = :{field}"
-                    expression_values[f":{field}"] = body[field]
+                    expression_values[f":{field}"] = value
 
         # Update the item
         kwargs = {
