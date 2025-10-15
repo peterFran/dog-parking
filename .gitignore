@@ -52,3 +52,4 @@ htmlcov/
 
 # Logs
 *.log
+functions/docs/openapi.yaml

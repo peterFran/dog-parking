@@ -45,6 +45,10 @@ fi
 echo -e "${GREEN}✅ Prerequisites check passed${NC}"
 echo ""
 
+# Sync OpenAPI spec to docs function
+echo -e "${YELLOW}📄 Syncing OpenAPI spec to docs function...${NC}"
+./sync-openapi.sh
+
 # Build the SAM application
 echo -e "${YELLOW}🏗️  Building SAM application...${NC}"
 sam build

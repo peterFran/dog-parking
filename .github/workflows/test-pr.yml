@@ -51,6 +51,9 @@ jobs:
         pip install aws-sam-cli
         sam validate --template template.yaml
         
+    - name: Sync OpenAPI spec
+      run: ./sync-openapi.sh
+
     - name: Build SAM application
       run: |
         sam build --template template.yaml --use-container
