@@ -188,7 +188,9 @@
             ],
             "Resource": [
                 "arn:aws:lambda:*:*:layer:auth-layer-*",
-                "arn:aws:lambda:*:*:layer:auth-layer-*:*"
+                "arn:aws:lambda:*:*:layer:auth-layer-*:*",
+                "arn:aws:lambda:*:*:layer:models-layer-*",
+                "arn:aws:lambda:*:*:layer:models-layer-*:*"
             ]
         },
         {

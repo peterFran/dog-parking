@@ -184,3 +184,72 @@ The platform uses **Firebase Authentication** (not AWS Cognito):
 5. **Deployment**: Use `./deploy.sh` for backend, Vercel for frontend
 
 The codebase prioritizes rapid iteration and AWS serverless best practices while maintaining clear separation between authentication, business logic, and data persistence layers.
+
+## Development Best Practices (Claude-Specific)
+
+### OpenAPI & Code Generation
+- **OpenAPI spec location**: `openapi.yaml` (root directory)
+- **Generated models**: `functions/shared/models/generated.py` (auto-generated via `./generate-models.sh`)
+- **Validation**: Use Pydantic v2 models from generated.py for all request validation
+- **DO NOT modify generated.py directly** - update openapi.yaml and regenerate
+- **Regeneration command**: `./generate-models.sh` (uses datamodel-code-generator)
+
+### Lambda Layer Dependencies
+- **ModelsLayer** (`functions/shared/`): Contains Pydantic models - **DO NOT add pydantic to individual Lambda requirements.txt**
+- **AuthLayer** (`functions/auth/`): Contains Firebase authentication utilities
+- **Dependency principle**: If a package is in a shared layer, remove it from function-specific requirements.txt to avoid conflicts
+- **Critical**: Never pin `pydantic-core` explicitly - let Pydantic manage its own dependencies
+
+### Error Handling Patterns
+- **Validation errors (Pydantic)**: Return HTTP 422 with formatted error messages
+- **Business logic errors**: Return HTTP 400 with simple error messages
+- **Format Pydantic errors** for user-friendliness:
+  ```python
+  error_messages = []
+  for error in e.errors():
+      field = error['loc'][0] if error['loc'] else 'field'
+      msg = error['msg']
+      error_messages.append(f"{field}: {msg}")
+  return create_response(422, {"error": "; ".join(error_messages)})
+  ```
+
+### SAM Build & Deployment
+- **Local build issues**: If SAM build fails locally, it will fail in CI - check dependency conflicts first
+- **Common failure**: Dependency conflicts between layers and function requirements
+- **Resolution strategy**: Use `pip-compile` or manual resolution, ensure no duplicate dependencies
+- **Layer permissions**: Deploying new layers requires `lambda:PublishLayerVersion` IAM permission
+
+### Testing & CI/CD
+- **Always run `./run-tests.sh` before pushing** - it catches 90% of CI failures
+- **Test assertion patterns**: When updating error formats, update test assertions to match
+- **Status code conventions**: 422 for validation, 400 for business logic, 401 for auth, 404 for not found
+- **CI debugging**: Use `gh run view <run-id> --log-failed` to quickly find errors
+- **Integration test failures**: Often IAM permission issues - check CloudFormation events for "CREATE_FAILED"
+
+### IAM & Permissions
+- **GitHub Actions IAM user**: `github-actions-dog-parking`
+- **Required permissions for layers**: `lambda:PublishLayerVersion`, `lambda:GetLayerVersion`, `lambda:DeleteLayerVersion`
+- **Policy location**: `corrected-iam-policy.json` (not checked into git)
+- **Pattern**: When adding new AWS resources, update IAM policy proactively
+
+### Pydantic-Specific Gotchas
+- **Date parsing**: Pydantic auto-parses ISO date strings to `datetime.date` objects - don't call `strptime()` again
+- **Enum serialization**: Use `model_dump(mode='json')` to properly serialize enums to strings
+- **Enum value extraction**: Use `enum_field.value` to get string value, but check with `hasattr(s, 'value')` for safety
+- **Nested models**: Use `.model_dump(mode='json')` for nested Pydantic models (e.g., operating_hours)
+
+### Common Pitfalls to Avoid
+1. **Don't duplicate dependencies** between layers and functions
+2. **Don't pin transitive dependencies** (like pydantic-core) - let the main package manage them
+3. **Don't skip test updates** when changing error response formats
+4. **Don't assume local test success = CI success** - different Python environments can have different dependency resolution
+5. **Don't commit without running `./run-tests.sh`** - it's your safety net
+
+### Code Generation Workflow
+When updating API schemas:
+1. Update `openapi.yaml` with new/changed schemas
+2. Run `./generate-models.sh` to regenerate Pydantic models
+3. Update Lambda functions to use new model fields
+4. Update tests to match new validation behavior
+5. Run `./run-tests.sh` to verify everything works
+6. Commit all changes together (openapi.yaml + generated.py + function code + tests)
