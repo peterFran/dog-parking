@@ -77,6 +77,9 @@ jobs:
       - name: Validate SAM template
         run: sam validate --template ${{ env.SAM_TEMPLATE }}
 
+      - name: Sync OpenAPI spec
+        run: ./sync-openapi.sh
+
       - name: Build SAM application
         run: sam build --template ${{ env.SAM_TEMPLATE }} --use-container
 

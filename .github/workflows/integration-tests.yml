@@ -61,7 +61,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
-      
+
+      - name: Sync OpenAPI spec
+        run: ./sync-openapi.sh
+
       - name: Build SAM application
         run: sam build --use-container
       
