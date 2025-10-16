@@ -445,6 +445,8 @@ components:
       required:
         - name
         - address
+        - latitude
+        - longitude
         - capacity
         - operating_hours
       properties:
@@ -459,6 +461,20 @@ components:
           description: Full venue address
           example: "123 Main St, London, UK"
           minLength: 1
+        latitude:
+          type: number
+          format: float
+          description: Latitude coordinate (WGS84)
+          example: 51.5074
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          format: float
+          description: Longitude coordinate (WGS84)
+          example: -0.1278
+          minimum: -180
+          maximum: 180
         capacity:
           type: integer
           description: Maximum number of dogs that can be accommodated simultaneously
@@ -485,6 +501,8 @@ components:
         - id
         - name
         - address
+        - latitude
+        - longitude
         - capacity
         - operating_hours
         - created_at
@@ -497,6 +515,16 @@ components:
           type: string
         address:
           type: string
+        latitude:
+          type: number
+          format: float
+          description: Latitude coordinate (WGS84)
+          example: 51.5074
+        longitude:
+          type: number
+          format: float
+          description: Longitude coordinate (WGS84)
+          example: -0.1278
         capacity:
           type: integer
         operating_hours:
@@ -1458,6 +1486,16 @@ paths:
                   type: string
                 address:
                   type: string
+                latitude:
+                  type: number
+                  format: float
+                  minimum: -90
+                  maximum: 90
+                longitude:
+                  type: number
+                  format: float
+                  minimum: -180
+                  maximum: 180
                 capacity:
                   type: integer
                 operating_hours:

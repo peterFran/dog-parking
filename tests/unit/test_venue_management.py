@@ -36,6 +36,8 @@ class TestVenueManagement:
         return {
             "name": "Downtown Dog Care",
             "address": "123 Main St, New York, NY 10001",
+            "latitude": 40.7128,
+            "longitude": -74.0060,
             "capacity": 20,
             "operating_hours": {
                 "monday": {"open": True, "start": "08:00", "end": "18:00"},
@@ -93,6 +95,46 @@ class TestVenueManagement:
         assert response["statusCode"] == 422
         body = json.loads(response["body"])
         assert "capacity:" in body["error"] and ("greater than 0" in body["error"] or "Input should be" in body["error"])
+
+    def test_create_venue_invalid_latitude(self, mock_table, sample_venue_data):
+        """Test venue creation with invalid latitude"""
+        sample_venue_data["latitude"] = 100  # Out of range
+
+        mock_dynamodb = MagicMock()
+        event = {"body": json.dumps(sample_venue_data), "httpMethod": "POST"}
+
+        response = create_venue(mock_table, mock_dynamodb, event)
+
+        assert response["statusCode"] == 422
+        body = json.loads(response["body"])
+        assert "latitude" in body["error"].lower()
+
+    def test_create_venue_invalid_longitude(self, mock_table, sample_venue_data):
+        """Test venue creation with invalid longitude"""
+        sample_venue_data["longitude"] = -200  # Out of range
+
+        mock_dynamodb = MagicMock()
+        event = {"body": json.dumps(sample_venue_data), "httpMethod": "POST"}
+
+        response = create_venue(mock_table, mock_dynamodb, event)
+
+        assert response["statusCode"] == 422
+        body = json.loads(response["body"])
+        assert "longitude" in body["error"].lower()
+
+    def test_create_venue_missing_coordinates(self, mock_table, sample_venue_data):
+        """Test venue creation with missing coordinates"""
+        del sample_venue_data["latitude"]
+        del sample_venue_data["longitude"]
+
+        mock_dynamodb = MagicMock()
+        event = {"body": json.dumps(sample_venue_data), "httpMethod": "POST"}
+
+        response = create_venue(mock_table, mock_dynamodb, event)
+
+        assert response["statusCode"] == 422
+        body = json.loads(response["body"])
+        assert "Field required" in body["error"]
 
     def test_get_venue_success(self, mock_table):
         """Test successful venue retrieval"""
@@ -162,6 +204,54 @@ class TestVenueManagement:
         assert response["statusCode"] == 404
         body = json.loads(response["body"])
         assert "not found" in body["error"]
+
+    def test_update_venue_coordinates(self, mock_table):
+        """Test venue update with coordinates"""
+        venue_id = "venue-123"
+        existing_venue = {"id": venue_id, "name": "Test Venue", "latitude": 40.0, "longitude": -73.0}
+        updated_venue = {"id": venue_id, "name": "Test Venue", "latitude": 41.0, "longitude": -74.0}
+
+        mock_table.get_item.return_value = {"Item": existing_venue}
+        mock_table.update_item.return_value = {"Attributes": updated_venue}
+
+        event = {"body": json.dumps({"latitude": 41.0, "longitude": -74.0}), "httpMethod": "PUT"}
+
+        response = update_venue(mock_table, venue_id, event)
+
+        assert response["statusCode"] == 200
+        body = json.loads(response["body"])
+        assert body["latitude"] == 41.0
+        assert body["longitude"] == -74.0
+
+    def test_update_venue_invalid_latitude(self, mock_table):
+        """Test venue update with invalid latitude"""
+        venue_id = "venue-123"
+        existing_venue = {"id": venue_id, "name": "Test Venue"}
+
+        mock_table.get_item.return_value = {"Item": existing_venue}
+
+        event = {"body": json.dumps({"latitude": 95}), "httpMethod": "PUT"}
+
+        response = update_venue(mock_table, venue_id, event)
+
+        assert response["statusCode"] == 400
+        body = json.loads(response["body"])
+        assert "Latitude must be between -90 and 90" in body["error"]
+
+    def test_update_venue_invalid_longitude(self, mock_table):
+        """Test venue update with invalid longitude"""
+        venue_id = "venue-123"
+        existing_venue = {"id": venue_id, "name": "Test Venue"}
+
+        mock_table.get_item.return_value = {"Item": existing_venue}
+
+        event = {"body": json.dumps({"longitude": 200}), "httpMethod": "PUT"}
+
+        response = update_venue(mock_table, venue_id, event)
+
+        assert response["statusCode"] == 400
+        body = json.loads(response["body"])
+        assert "Longitude must be between -180 and 180" in body["error"]
 
     def test_delete_venue_success(self, mock_table):
         """Test successful venue deletion"""
@@ -331,7 +421,9 @@ class TestVenueManagement:
             "body": json.dumps(
                 {
                     "name": "Test Venue",
-                    "address": "123 Test St, New York, NY 10001",  # Fixed: address should be string
+                    "address": "123 Test St, New York, NY 10001",
+                    "latitude": 40.7128,
+                    "longitude": -74.0060,
                     "capacity": 20,
                     "operating_hours": {
                         "monday": {"open": True, "start": "08:00", "end": "18:00"}

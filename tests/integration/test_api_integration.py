@@ -411,21 +411,18 @@ class TestSlotManagementIntegration:
         """Create a test venue for slot generation"""
         venue_data = {
             "name": f"Slot Test Venue {int(time.time())}",
-            "address": {
-                "street": "123 Slot Test St",
-                "city": "Test City",
-                "state": "TS",
-                "zip": "12345",
-            },
+            "address": "123 Slot Test St, Test City, TS 12345",
+            "latitude": 40.7128,
+            "longitude": -74.0060,
             "capacity": 20,
             "operating_hours": {
-                "monday": {"open": "09:00", "close": "17:00"},
-                "tuesday": {"open": "09:00", "close": "17:00"},
-                "wednesday": {"open": "09:00", "close": "17:00"},
-                "thursday": {"open": "09:00", "close": "17:00"},
-                "friday": {"open": "09:00", "close": "17:00"},
-                "saturday": {"open": "10:00", "close": "16:00"},
-                "sunday": {"closed": True},
+                "monday": {"open": True, "start": "09:00", "end": "17:00"},
+                "tuesday": {"open": True, "start": "09:00", "end": "17:00"},
+                "wednesday": {"open": True, "start": "09:00", "end": "17:00"},
+                "thursday": {"open": True, "start": "09:00", "end": "17:00"},
+                "friday": {"open": True, "start": "09:00", "end": "17:00"},
+                "saturday": {"open": True, "start": "10:00", "end": "16:00"},
+                "sunday": {"open": False},
             },
             "services": ["daycare", "boarding"],
         }
