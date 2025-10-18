@@ -51,7 +51,10 @@ def lambda_handler(event, context):
         path_parameters = event.get("pathParameters") or {}
 
         # Route to appropriate handler
-        if path.endswith("/profile"):
+        if http_method == "OPTIONS":
+            # Handle CORS preflight
+            return create_response(200, {})
+        elif path.endswith("/profile"):
             if http_method == "GET":
                 return get_owner_profile(owners_table, event)
             elif http_method == "PUT":
