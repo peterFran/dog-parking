@@ -95,7 +95,7 @@ jobs:
             sam deploy \
               --template-file .aws-sam/build/template.yaml \
               --stack-name ${{ env.STACK_NAME }} \
-              --parameter-overrides Environment=staging \
+              --parameter-overrides Environment=staging GoogleProjectId=dog-parking-1fcde \
               --capabilities CAPABILITY_IAM \
               --region ${{ env.AWS_REGION }} \
               --no-fail-on-empty-changeset \
