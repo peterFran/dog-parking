@@ -52,7 +52,10 @@ def lambda_handler(event, context):
 
         # Route to appropriate handler
         if "/venues" in path:
-            if http_method == "GET":
+            if http_method == "OPTIONS":
+                # Handle CORS preflight
+                return create_response(200, {})
+            elif http_method == "GET":
                 if path_parameters.get("id"):
                     return get_venue(venues_table, path_parameters["id"])
                 else:
