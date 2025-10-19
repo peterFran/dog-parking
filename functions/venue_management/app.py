@@ -101,8 +101,8 @@ def create_venue(table, dynamodb, event):
             "id": venue_id,
             "name": venue_request.name,
             "address": venue_request.address,
-            "latitude": float(venue_request.latitude),
-            "longitude": float(venue_request.longitude),
+            "latitude": decimal.Decimal(str(venue_request.latitude)),
+            "longitude": decimal.Decimal(str(venue_request.longitude)),
             "capacity": venue_request.capacity,
             "operating_hours": venue_request.operating_hours.model_dump(mode='json'),
             "services": [s.value if hasattr(s, 'value') else s for s in venue_request.services] if venue_request.services else ["daycare"],
@@ -206,14 +206,14 @@ def update_venue(table, venue_id, event):
                             400, {"error": "Latitude must be between -90 and 90"}
                         )
                     update_expression += f", latitude = :latitude"
-                    expression_values[":latitude"] = float(body[field])
+                    expression_values[":latitude"] = decimal.Decimal(str(body[field]))
                 elif field == "longitude":
                     if not isinstance(body[field], (int, float)) or body[field] < -180 or body[field] > 180:
                         return create_response(
                             400, {"error": "Longitude must be between -180 and 180"}
                         )
                     update_expression += f", longitude = :longitude"
-                    expression_values[":longitude"] = float(body[field])
+                    expression_values[":longitude"] = decimal.Decimal(str(body[field]))
                 elif field == "capacity":
                     if not isinstance(body[field], int) or body[field] < 1:
                         return create_response(
