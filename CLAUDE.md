@@ -229,7 +229,7 @@ The codebase prioritizes rapid iteration and AWS serverless best practices while
 ### IAM & Permissions
 - **GitHub Actions IAM user**: `github-actions-dog-parking`
 - **Required permissions for layers**: `lambda:PublishLayerVersion`, `lambda:GetLayerVersion`, `lambda:DeleteLayerVersion`
-- **Policy location**: `corrected-iam-policy.json` (not checked into git)
+- **Policy location**: `infra/corrected-iam-policy.json` (not checked into git)
 - **Pattern**: When adding new AWS resources, update IAM policy proactively
 
 ### Pydantic-Specific Gotchas
