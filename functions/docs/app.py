@@ -55,6 +55,8 @@ def lambda_handler(event, context):
             "statusCode": 200,
             "headers": {
                 "Content-Type": "application/json",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
                 "Access-Control-Allow-Origin": "*",
             },
             "body": json.dumps(openapi_spec),
@@ -101,6 +103,8 @@ def lambda_handler(event, context):
             "statusCode": 200,
             "headers": {
                 "Content-Type": "text/html",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
                 "Access-Control-Allow-Origin": "*",
             },
             "body": swagger_ui_html,
@@ -112,6 +116,8 @@ def lambda_handler(event, context):
             "statusCode": 200,
             "headers": {
                 "Content-Type": "application/json",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
                 "Access-Control-Allow-Origin": "*",
             },
             "body": json.dumps(

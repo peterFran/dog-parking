@@ -348,6 +348,8 @@ def create_response(status_code: int, body: Dict[str, Any]) -> Dict[str, Any]:
         "statusCode": status_code,
         "headers": {
             "Content-Type": "application/json",
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token",
