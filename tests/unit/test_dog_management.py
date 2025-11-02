@@ -416,6 +416,14 @@ def test_delete_dog():
     # Setup mock DynamoDB
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
 
+    # Create owners table
+    dynamodb.create_table(
+        TableName="owners-test",
+        KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
     # Create dogs table
     dynamodb.create_table(
         TableName="dogs-test",
@@ -457,6 +465,122 @@ def test_delete_dog():
         response = lambda_handler(event, None)
 
     assert response["statusCode"] == 204
+
+    # Verify the dog was actually deleted
+    verify_response = dogs_table.get_item(Key={"id": "dog-123"})
+    assert "Item" not in verify_response
+
+
+@mock_aws
+def test_delete_dog_not_found():
+    """Test deleting non-existent dog"""
+    # Setup mock DynamoDB
+    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+
+    # Create owners table
+    dynamodb.create_table(
+        TableName="owners-test",
+        KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Create dogs table (empty - no dog exists)
+    dynamodb.create_table(
+        TableName="dogs-test",
+        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
+        AttributeDefinitions=[
+            {"AttributeName": "id", "AttributeType": "S"},
+            {"AttributeName": "owner_id", "AttributeType": "S"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "owner-index",
+                "KeySchema": [{"AttributeName": "owner_id", "KeyType": "HASH"}],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    event = {
+        "httpMethod": "DELETE",
+        "path": "/dogs/nonexistent-dog",
+        "pathParameters": {"id": "nonexistent-dog"},
+    }
+
+    with patch.dict(
+        os.environ, {"DOGS_TABLE": "dogs-test", "OWNERS_TABLE": "owners-test"}
+    ):
+        response = lambda_handler(event, None)
+
+    assert response["statusCode"] == 404
+    body = json.loads(response["body"])
+    assert "Dog not found" in body["error"]
+
+
+@mock_aws
+def test_delete_dog_access_denied():
+    """Test deleting dog that doesn't belong to user"""
+    # Setup mock DynamoDB
+    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+
+    # Create owners table
+    dynamodb.create_table(
+        TableName="owners-test",
+        KeySchema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "user_id", "AttributeType": "S"}],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Create dogs table
+    dynamodb.create_table(
+        TableName="dogs-test",
+        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
+        AttributeDefinitions=[
+            {"AttributeName": "id", "AttributeType": "S"},
+            {"AttributeName": "owner_id", "AttributeType": "S"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "owner-index",
+                "KeySchema": [{"AttributeName": "owner_id", "KeyType": "HASH"}],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Add dog belonging to different user
+    dogs_table = dynamodb.Table("dogs-test")
+    dogs_table.put_item(
+        Item={
+            "id": "dog-123",
+            "name": "Buddy",
+            "owner_id": "different-user",  # Different owner
+            "breed": "Labrador",
+        }
+    )
+
+    event = {
+        "httpMethod": "DELETE",
+        "path": "/dogs/dog-123",
+        "pathParameters": {"id": "dog-123"},
+    }
+
+    with patch.dict(
+        os.environ, {"DOGS_TABLE": "dogs-test", "OWNERS_TABLE": "owners-test"}
+    ):
+        response = lambda_handler(event, None)
+
+    assert response["statusCode"] == 403
+    body = json.loads(response["body"])
+    assert "Access denied" in body["error"]
+
+    # Verify the dog was NOT deleted
+    verify_response = dogs_table.get_item(Key={"id": "dog-123"})
+    assert "Item" in verify_response
+    assert verify_response["Item"]["name"] == "Buddy"
 
 
 @mock_aws
