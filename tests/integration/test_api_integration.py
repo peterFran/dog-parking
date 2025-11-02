@@ -333,6 +333,315 @@ class TestAPIIntegration:
             assert response.status_code in [204, 404]
 
 
+class TestBookingCancellationScenarios:
+    """Test booking cancellation/deletion scenarios"""
+
+    @classmethod
+    def setup_class(cls):
+        cls.api_base_url = os.environ.get("API_BASE_URL", "http://127.0.0.1:3000")
+        cls.headers = {"Content-Type": "application/json"}
+        cls.test_data = {}
+
+    def test_01_create_owner_for_cancellation_tests(self):
+        """Create test owner for cancellation tests"""
+        owner_data = {
+            "name": "Cancel Test Owner",
+            "email": f"cancel_test_{int(time.time())}@example.com",
+            "phone": "+1234567890",
+            "address": {
+                "street": "123 Cancel Test St",
+                "city": "Test City",
+                "state": "TS",
+                "zip": "12345",
+            },
+        }
+
+        response = requests.post(
+            f"{self.api_base_url}/owners/register",
+            json=owner_data,
+            headers=self.headers,
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        self.test_data["owner_id"] = data["id"]
+
+    def test_02_create_dog_for_cancellation_tests(self):
+        """Create a dog for cancellation tests"""
+        if "owner_id" not in self.test_data:
+            pytest.skip("Owner creation test must pass first")
+
+        dog_data = {
+            "name": "Booking Cancel Dog",
+            "breed": "Test Breed",
+            "age": 3,
+            "size": "medium",
+            "owner_id": self.test_data["owner_id"],
+            "vaccination_status": "up-to-date",
+        }
+
+        response = requests.post(
+            f"{self.api_base_url}/dogs", json=dog_data, headers=self.headers
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        self.test_data["dog_id"] = data["id"]
+
+    def test_03_create_booking_to_cancel(self):
+        """Create a booking to test cancellation"""
+        if "dog_id" not in self.test_data or "owner_id" not in self.test_data:
+            pytest.skip("Dog and owner creation tests must pass first")
+
+        # Create booking for tomorrow
+        start_time = datetime.now(timezone.utc).replace(
+            hour=9, minute=0, second=0, microsecond=0
+        )
+        start_time = start_time.replace(day=start_time.day + 1)
+        end_time = start_time.replace(hour=17)
+
+        booking_data = {
+            "dog_id": self.test_data["dog_id"],
+            "owner_id": self.test_data["owner_id"],
+            "service_type": "daycare",
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "special_instructions": "Test booking for cancellation",
+        }
+
+        response = requests.post(
+            f"{self.api_base_url}/bookings", json=booking_data, headers=self.headers
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        self.test_data["booking_id"] = data["id"]
+
+    def test_04_cancel_booking_successfully(self):
+        """Test successful booking cancellation"""
+        if "booking_id" not in self.test_data:
+            pytest.skip("Booking creation test must pass first")
+
+        response = requests.delete(
+            f"{self.api_base_url}/bookings/{self.test_data['booking_id']}",
+            headers=self.headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "cancelled"
+        assert data["id"] == self.test_data["booking_id"]
+
+    def test_05_verify_booking_cancelled(self):
+        """Verify cancelled booking status persists"""
+        if "booking_id" not in self.test_data:
+            pytest.skip("Previous tests must pass first")
+
+        response = requests.get(
+            f"{self.api_base_url}/bookings/{self.test_data['booking_id']}",
+            headers=self.headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "cancelled"
+
+    def test_06_cancel_nonexistent_booking(self):
+        """Test cancelling a booking that doesn't exist"""
+        response = requests.delete(
+            f"{self.api_base_url}/bookings/nonexistent-booking-id-12345",
+            headers=self.headers,
+        )
+
+        assert response.status_code == 404
+        data = response.json()
+        assert "error" in data
+        assert "not found" in data["error"].lower()
+
+    def test_07_cancel_booking_twice(self):
+        """Test cancelling the same booking twice (idempotency check)"""
+        # Create a new booking first
+        if "dog_id" not in self.test_data or "owner_id" not in self.test_data:
+            pytest.skip("Dog and owner creation tests must pass first")
+
+        start_time = datetime.now(timezone.utc).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        )
+        start_time = start_time.replace(day=start_time.day + 2)
+        end_time = start_time.replace(hour=16)
+
+        booking_data = {
+            "dog_id": self.test_data["dog_id"],
+            "owner_id": self.test_data["owner_id"],
+            "service_type": "boarding",
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        }
+
+        response = requests.post(
+            f"{self.api_base_url}/bookings", json=booking_data, headers=self.headers
+        )
+        assert response.status_code == 201
+        booking_id = response.json()["id"]
+
+        # First cancellation should succeed
+        response1 = requests.delete(
+            f"{self.api_base_url}/bookings/{booking_id}",
+            headers=self.headers,
+        )
+        assert response1.status_code == 200
+        assert response1.json()["status"] == "cancelled"
+
+        # Second cancellation should also succeed (idempotent)
+        response2 = requests.delete(
+            f"{self.api_base_url}/bookings/{booking_id}",
+            headers=self.headers,
+        )
+        assert response2.status_code == 200
+        assert response2.json()["status"] == "cancelled"
+
+    def test_08_cleanup(self):
+        """Clean up test data"""
+        # Delete dog
+        if "dog_id" in self.test_data:
+            response = requests.delete(
+                f"{self.api_base_url}/dogs/{self.test_data['dog_id']}",
+                headers=self.headers,
+            )
+            assert response.status_code in [204, 404]
+
+
+class TestDogDeletionScenarios:
+    """Test dog deletion scenarios"""
+
+    @classmethod
+    def setup_class(cls):
+        cls.api_base_url = os.environ.get("API_BASE_URL", "http://127.0.0.1:3000")
+        cls.headers = {"Content-Type": "application/json"}
+        cls.test_data = {}
+
+    def test_01_create_owner_for_deletion_tests(self):
+        """Create test owner for deletion tests"""
+        owner_data = {
+            "name": "Delete Test Owner",
+            "email": f"delete_test_{int(time.time())}@example.com",
+            "phone": "+1234567890",
+            "address": {
+                "street": "123 Delete Test St",
+                "city": "Test City",
+                "state": "TS",
+                "zip": "12345",
+            },
+        }
+
+        response = requests.post(
+            f"{self.api_base_url}/owners/register",
+            json=owner_data,
+            headers=self.headers,
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        self.test_data["owner_id"] = data["id"]
+
+    def test_02_create_dog_for_deletion(self):
+        """Create a dog to test deletion"""
+        if "owner_id" not in self.test_data:
+            pytest.skip("Owner creation test must pass first")
+
+        dog_data = {
+            "name": "Dog To Delete",
+            "breed": "Test Breed",
+            "age": 2,
+            "size": "medium",
+            "owner_id": self.test_data["owner_id"],
+            "vaccination_status": "up-to-date",
+        }
+
+        response = requests.post(
+            f"{self.api_base_url}/dogs", json=dog_data, headers=self.headers
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        self.test_data["dog_id"] = data["id"]
+
+    def test_03_delete_dog_successfully(self):
+        """Test successful dog deletion"""
+        if "dog_id" not in self.test_data:
+            pytest.skip("Dog creation test must pass first")
+
+        response = requests.delete(
+            f"{self.api_base_url}/dogs/{self.test_data['dog_id']}",
+            headers=self.headers,
+        )
+
+        assert response.status_code == 204
+        assert response.text == "" or response.text == "{}"
+
+    def test_04_verify_dog_deleted(self):
+        """Verify deleted dog cannot be retrieved"""
+        if "dog_id" not in self.test_data:
+            pytest.skip("Previous tests must pass first")
+
+        response = requests.get(
+            f"{self.api_base_url}/dogs/{self.test_data['dog_id']}",
+            headers=self.headers,
+        )
+
+        assert response.status_code == 404
+        data = response.json()
+        assert "error" in data
+        assert "not found" in data["error"].lower()
+
+    def test_05_delete_nonexistent_dog(self):
+        """Test deleting a dog that doesn't exist"""
+        response = requests.delete(
+            f"{self.api_base_url}/dogs/nonexistent-dog-id-12345",
+            headers=self.headers,
+        )
+
+        assert response.status_code == 404
+        data = response.json()
+        assert "error" in data
+        assert "not found" in data["error"].lower()
+
+    def test_06_delete_dog_twice(self):
+        """Test deleting the same dog twice (idempotency check)"""
+        # Create a new dog first
+        if "owner_id" not in self.test_data:
+            pytest.skip("Owner creation test must pass first")
+
+        dog_data = {
+            "name": "Dog To Delete Twice",
+            "breed": "Test Breed",
+            "age": 3,
+            "size": "small",
+            "owner_id": self.test_data["owner_id"],
+            "vaccination_status": "up-to-date",
+        }
+
+        response = requests.post(
+            f"{self.api_base_url}/dogs", json=dog_data, headers=self.headers
+        )
+        assert response.status_code == 201
+        dog_id = response.json()["id"]
+
+        # First deletion should succeed
+        response1 = requests.delete(
+            f"{self.api_base_url}/dogs/{dog_id}",
+            headers=self.headers,
+        )
+        assert response1.status_code == 204
+
+        # Second deletion should return 404
+        response2 = requests.delete(
+            f"{self.api_base_url}/dogs/{dog_id}",
+            headers=self.headers,
+        )
+        assert response2.status_code == 404
+
+
 class TestAPIErrorScenarios:
     """Test error scenarios and edge cases"""
 

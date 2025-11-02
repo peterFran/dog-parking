@@ -514,6 +514,20 @@ def test_cancel_booking():
         BillingMode="PAY_PER_REQUEST",
     )
 
+    # Create slots table for capacity release
+    dynamodb.create_table(
+        TableName="slots-test",
+        KeySchema=[
+            {"AttributeName": "venue_date", "KeyType": "HASH"},
+            {"AttributeName": "slot_time", "KeyType": "RANGE"}
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "venue_date", "AttributeType": "S"},
+            {"AttributeName": "slot_time", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST"
+    )
+
     # Create test booking
     bookings_table = dynamodb.Table("bookings-test")
     bookings_table.put_item(
@@ -521,11 +535,27 @@ def test_cancel_booking():
             "id": "booking-123",
             "dog_id": "dog-123",
             "owner_id": "test-user-123",
+            "venue_id": "venue-123",
             "service_type": "daycare",
             "status": "pending",
             "price": Decimal("120.0"),
+            "start_time": "2024-01-01T09:00:00+00:00",
+            "end_time": "2024-01-01T17:00:00+00:00",
         }
     )
+
+    # Create test slots
+    slots_table = dynamodb.Table("slots-test")
+    for hour in range(9, 17):
+        slots_table.put_item(
+            Item={
+                "venue_date": "venue-123#2024-01-01",
+                "slot_time": f"{hour:02d}:00",
+                "available_capacity": 15,
+                "total_capacity": 20,
+                "booked_count": 5,
+            }
+        )
 
     # Test event
     event = {
@@ -549,6 +579,299 @@ def test_cancel_booking():
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body["status"] == "cancelled"
+
+    # Verify booking is actually cancelled in DB
+    verify_response = bookings_table.get_item(Key={"id": "booking-123"})
+    assert verify_response["Item"]["status"] == "cancelled"
+
+
+@mock_aws
+def test_cancel_booking_not_found():
+    """Test cancelling a non-existent booking"""
+    # Setup mock DynamoDB
+    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+
+    # Create bookings table (empty - no booking exists)
+    dynamodb.create_table(
+        TableName="bookings-test",
+        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
+        AttributeDefinitions=[
+            {"AttributeName": "id", "AttributeType": "S"},
+            {"AttributeName": "owner_id", "AttributeType": "S"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "owner-index",
+                "KeySchema": [{"AttributeName": "owner_id", "KeyType": "HASH"}],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Test event
+    event = {
+        "httpMethod": "DELETE",
+        "path": "/bookings/nonexistent-booking",
+        "pathParameters": {"id": "nonexistent-booking"},
+    }
+
+    with patch.dict(
+        os.environ,
+        {
+            "BOOKINGS_TABLE": "bookings-test",
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+            "SLOTS_TABLE": "slots-test",
+        },
+    ):
+        response = lambda_handler(event, None)
+
+    assert response["statusCode"] == 404
+    body = json.loads(response["body"])
+    assert "Booking not found" in body["error"]
+
+
+@mock_aws
+def test_cancel_already_cancelled_booking():
+    """Test cancelling a booking that is already cancelled"""
+    # Setup mock DynamoDB
+    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+
+    # Create bookings table
+    dynamodb.create_table(
+        TableName="bookings-test",
+        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
+        AttributeDefinitions=[
+            {"AttributeName": "id", "AttributeType": "S"},
+            {"AttributeName": "owner_id", "AttributeType": "S"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "owner-index",
+                "KeySchema": [{"AttributeName": "owner_id", "KeyType": "HASH"}],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Create slots table
+    dynamodb.create_table(
+        TableName="slots-test",
+        KeySchema=[
+            {"AttributeName": "venue_date", "KeyType": "HASH"},
+            {"AttributeName": "slot_time", "KeyType": "RANGE"}
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "venue_date", "AttributeType": "S"},
+            {"AttributeName": "slot_time", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST"
+    )
+
+    # Create already cancelled booking
+    bookings_table = dynamodb.Table("bookings-test")
+    bookings_table.put_item(
+        Item={
+            "id": "booking-123",
+            "dog_id": "dog-123",
+            "owner_id": "test-user-123",
+            "venue_id": "venue-123",
+            "service_type": "daycare",
+            "status": "cancelled",  # Already cancelled
+            "price": Decimal("120.0"),
+            "start_time": "2024-01-01T09:00:00+00:00",
+            "end_time": "2024-01-01T17:00:00+00:00",
+        }
+    )
+
+    # Test event
+    event = {
+        "httpMethod": "DELETE",
+        "path": "/bookings/booking-123",
+        "pathParameters": {"id": "booking-123"},
+    }
+
+    with patch.dict(
+        os.environ,
+        {
+            "BOOKINGS_TABLE": "bookings-test",
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+            "SLOTS_TABLE": "slots-test",
+        },
+    ):
+        response = lambda_handler(event, None)
+
+    # Should still return 200 and set status to cancelled (idempotent)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["status"] == "cancelled"
+
+
+@mock_aws
+def test_cancel_completed_booking():
+    """Test cancelling a completed booking (should still work)"""
+    # Setup mock DynamoDB
+    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+
+    # Create bookings table
+    dynamodb.create_table(
+        TableName="bookings-test",
+        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
+        AttributeDefinitions=[
+            {"AttributeName": "id", "AttributeType": "S"},
+            {"AttributeName": "owner_id", "AttributeType": "S"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "owner-index",
+                "KeySchema": [{"AttributeName": "owner_id", "KeyType": "HASH"}],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Create slots table
+    dynamodb.create_table(
+        TableName="slots-test",
+        KeySchema=[
+            {"AttributeName": "venue_date", "KeyType": "HASH"},
+            {"AttributeName": "slot_time", "KeyType": "RANGE"}
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "venue_date", "AttributeType": "S"},
+            {"AttributeName": "slot_time", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST"
+    )
+
+    # Create completed booking
+    bookings_table = dynamodb.Table("bookings-test")
+    bookings_table.put_item(
+        Item={
+            "id": "booking-123",
+            "dog_id": "dog-123",
+            "owner_id": "test-user-123",
+            "venue_id": "venue-123",
+            "service_type": "daycare",
+            "status": "completed",  # Completed
+            "price": Decimal("120.0"),
+            "start_time": "2024-01-01T09:00:00+00:00",
+            "end_time": "2024-01-01T17:00:00+00:00",
+        }
+    )
+
+    # Test event
+    event = {
+        "httpMethod": "DELETE",
+        "path": "/bookings/booking-123",
+        "pathParameters": {"id": "booking-123"},
+    }
+
+    with patch.dict(
+        os.environ,
+        {
+            "BOOKINGS_TABLE": "bookings-test",
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+            "SLOTS_TABLE": "slots-test",
+        },
+    ):
+        response = lambda_handler(event, None)
+
+    # Should succeed and change status to cancelled
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["status"] == "cancelled"
+
+
+@mock_aws
+def test_cancel_booking_access_denied():
+    """Test cancelling a booking that doesn't belong to user"""
+    # Setup mock DynamoDB
+    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+
+    # Create bookings table
+    dynamodb.create_table(
+        TableName="bookings-test",
+        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
+        AttributeDefinitions=[
+            {"AttributeName": "id", "AttributeType": "S"},
+            {"AttributeName": "owner_id", "AttributeType": "S"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "owner-index",
+                "KeySchema": [{"AttributeName": "owner_id", "KeyType": "HASH"}],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Create slots table
+    dynamodb.create_table(
+        TableName="slots-test",
+        KeySchema=[
+            {"AttributeName": "venue_date", "KeyType": "HASH"},
+            {"AttributeName": "slot_time", "KeyType": "RANGE"}
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "venue_date", "AttributeType": "S"},
+            {"AttributeName": "slot_time", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST"
+    )
+
+    # Create booking belonging to different user
+    bookings_table = dynamodb.Table("bookings-test")
+    bookings_table.put_item(
+        Item={
+            "id": "booking-123",
+            "dog_id": "dog-123",
+            "owner_id": "different-user",  # Different owner
+            "venue_id": "venue-123",
+            "service_type": "daycare",
+            "status": "pending",
+            "price": Decimal("120.0"),
+            "start_time": "2024-01-01T09:00:00+00:00",
+            "end_time": "2024-01-01T17:00:00+00:00",
+        }
+    )
+
+    # Test event (authenticated as test-user-123)
+    event = {
+        "httpMethod": "DELETE",
+        "path": "/bookings/booking-123",
+        "pathParameters": {"id": "booking-123"},
+    }
+
+    with patch.dict(
+        os.environ,
+        {
+            "BOOKINGS_TABLE": "bookings-test",
+            "DOGS_TABLE": "dogs-test",
+            "OWNERS_TABLE": "owners-test",
+            "VENUES_TABLE": "venues-test",
+            "SLOTS_TABLE": "slots-test",
+        },
+    ):
+        response = lambda_handler(event, None)
+
+    # Should return 403 Access Denied
+    assert response["statusCode"] == 403
+    body = json.loads(response["body"])
+    assert "Access denied" in body["error"]
+
+    # Verify the booking was NOT cancelled
+    verify_response = bookings_table.get_item(Key={"id": "booking-123"})
+    assert verify_response["Item"]["status"] == "pending"
 
 
 def test_missing_required_fields():

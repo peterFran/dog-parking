@@ -76,7 +76,7 @@ def lambda_handler(event, context):
         elif http_method == "PUT":
             return update_booking(bookings_table, path_parameters["id"], event)
         elif http_method == "DELETE":
-            return cancel_booking(bookings_table, path_parameters["id"])
+            return cancel_booking(bookings_table, path_parameters["id"], event)
         else:
             return create_response(405, {"error": "Method not allowed"})
 
@@ -288,15 +288,26 @@ def update_booking(table, booking_id, event):
         return create_response(500, {"error": "Failed to update booking"})
 
 
-def cancel_booking(table, booking_id):
-    """Cancel a booking and release slot capacity"""
+@require_auth
+def cancel_booking(table, booking_id, event):
+    """Cancel a booking and release slot capacity (with owner verification)"""
     try:
+        # Get user_id from authenticated claims
+        user_id = get_user_id_from_event(event)
+
+        if not user_id:
+            return create_response(401, {"error": "Authentication required"})
+
         # Get booking details first
         existing_booking = table.get_item(Key={"id": booking_id})
         if "Item" not in existing_booking:
             return create_response(404, {"error": "Booking not found"})
 
         booking = existing_booking["Item"]
+
+        # Verify ownership
+        if booking.get("owner_id") != user_id:
+            return create_response(403, {"error": "Access denied - not your booking"})
 
         # Release slot capacity
         try:
@@ -325,7 +336,7 @@ def cancel_booking(table, booking_id):
             ReturnValues="ALL_NEW",
         )
 
-        logger.info(f"Cancelled booking: {booking_id}")
+        logger.info(f"Cancelled booking: {booking_id} by user: {user_id}")
         return create_response(200, response["Attributes"])
 
     except ClientError as e:
